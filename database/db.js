@@ -1,12 +1,19 @@
+const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
+
+// Ensure database directory exists
+const dbDir = path.dirname(config.DB_PATH);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 
 let db;
 try {
   const Database = require('better-sqlite3');
   db = new Database(config.DB_PATH, { verbose: null });
-  console.log('[DB] Conectado exitosamente');
+  console.log('[DB] Conectado exitosamente en:', config.DB_PATH);
 } catch (err) {
   console.error('❌ [ERROR FATAL] No se pudo cargar el motor de Base de Datos.');
   console.error('Este error es común si no se instaló "build-essential" o si "npm install" falló.');

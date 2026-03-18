@@ -166,17 +166,19 @@ echo -e "${BLUE}[8/10] Desplegando Panel La Casita...${NC}"
 PANEL_DIR="/opt/lacasita"
 mkdir -p $PANEL_DIR
 
-# Copy files
-if [ "$(pwd)" != "$PANEL_DIR" ]; then
-  cp -r ./* $PANEL_DIR/
-fi
+# Copy files including hidden ones (.env, .gitignore, etc)
+echo "Copiando archivos..."
+cp -af ./* $PANEL_DIR/ 2>/dev/null || true
+cp -af ./.[!.]* $PANEL_DIR/ 2>/dev/null || true
+
 cd $PANEL_DIR
 
-# Install npm dependencies with more robustness
-echo -e "Instalando módulos de Node.js (esto puede tardar unos minutos)..."
-npm install --production --no-audit --no-fund || {
-  echo -e "${RED}[ERROR] Error instalando dependencias. Revisa que tengas internet.${NC}"
-  exit 1
+# IMPORTANT: Force clean install to compile native better-sqlite3 binary on THIS VPS
+echo -e "Instalando módulos de Node.js (con compilación nativa)..."
+rm -rf node_modules package-lock.json
+npm install --production --force || {
+  echo -e "${RED}[ERROR] Falló la instalación de módulos. Intentando sin force...${NC}"
+  npm install --production
 }
 
 # Create .env / config
