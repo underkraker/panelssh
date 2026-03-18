@@ -44,6 +44,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    connection_type TEXT DEFAULT 'ssh',
     device_limit INTEGER DEFAULT 1,
     expiry_date DATE NOT NULL,
     created_by INTEGER NOT NULL,
@@ -96,10 +97,17 @@ db.exec(`
 // ── Schema migrations ───────────────────────────────────────
 const userColumns = db.prepare('PRAGMA table_info(users)').all();
 const hasEncryptedPassword = userColumns.some(col => col.name === 'password_encrypted');
+const hasConnectionType = userColumns.some(col => col.name === 'connection_type');
 
 if (!hasEncryptedPassword) {
   db.exec('ALTER TABLE users ADD COLUMN password_encrypted TEXT');
 }
+
+if (!hasConnectionType) {
+  db.exec("ALTER TABLE users ADD COLUMN connection_type TEXT DEFAULT 'ssh'");
+}
+
+db.prepare("UPDATE users SET connection_type = 'ssh' WHERE connection_type IS NULL OR connection_type = ''").run();
 
 // Migrate any plain-text password to encrypted storage
 try {
@@ -143,6 +151,9 @@ const insertService = db.prepare('INSERT OR IGNORE INTO service_ports (name, por
 for (const svc of defaultServices) {
   insertService.run(svc.name, svc.port, svc.enabled);
 }
+
+// Keep SSH protected and always configured on port 22
+db.prepare("UPDATE service_ports SET port = 22, enabled = 1 WHERE name = 'ssh'").run();
 
 // ── Seed Default Settings ────────────────────────────────────
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');

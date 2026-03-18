@@ -86,7 +86,7 @@ const LogsModule = {
       password_change: 'blue',
       demo_create: 'accent', demo_delete: 'red', demo_expire: 'orange',
       reseller_create: 'green', reseller_edit: 'blue', reseller_delete: 'red',
-      credits_update: 'accent', service_toggle: 'blue', port_change: 'orange',
+      credits_update: 'accent', service_toggle: 'blue', service_repair: 'accent', port_change: 'orange',
       auto_expire: 'orange'
     };
     const color = colors[action] || 'blue';

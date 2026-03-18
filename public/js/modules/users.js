@@ -1,5 +1,23 @@
 // Users Module
 const UsersModule = {
+  connectionTypes: {
+    ssh: 'SSH Directo',
+    ssl: 'SSL/TLS',
+    websocket: 'WebSocket',
+    squid: 'Squid Proxy',
+    v2ray: 'V2Ray',
+    hysteria: 'Hysteria 2'
+  },
+
+  connectionServiceMap: {
+    ssh: 'ssh',
+    ssl: 'stunnel',
+    websocket: 'websocket',
+    squid: 'squid',
+    v2ray: 'v2ray',
+    hysteria: 'hysteria'
+  },
+
   async render() {
     const content = document.getElementById('content');
     content.innerHTML = '<div class="spinner"></div>';
@@ -30,6 +48,7 @@ const UsersModule = {
                   <th>Dispositivos</th>
                   <th>Expiración</th>
                   <th>Días</th>
+                  <th>Conexión</th>
                   <th>Estado</th>
                   <th>Creado por</th>
                   <th>Acciones</th>
@@ -37,7 +56,7 @@ const UsersModule = {
               </thead>
               <tbody id="users-table-body">
                 ${users.length === 0 ? `
-                  <tr><td colspan="7" class="empty-state"><i class="fas fa-users"></i><p>No hay usuarios</p></td></tr>
+                  <tr><td colspan="8" class="empty-state"><i class="fas fa-users"></i><p>No hay usuarios</p></td></tr>
                 ` : users.map(u => this.renderRow(u)).join('')}
               </tbody>
             </table>
@@ -66,6 +85,7 @@ const UsersModule = {
         <td>${u.device_limit}</td>
         <td>${Utils.formatDate(u.expiry_date)}</td>
         <td>${Utils.daysLeftBadge(u.days_left)}</td>
+        <td><span class="badge badge-blue">${Utils.escapeHtml(this.connectionTypes[u.connection_type] || 'SSH Directo')}</span></td>
         <td>${Utils.statusBadge(u.status)}</td>
         <td>${Utils.escapeHtml(u.created_by_name || '—')}</td>
         <td>
@@ -83,7 +103,28 @@ const UsersModule = {
     `;
   },
 
-  showCreateModal() {
+  async showCreateModal() {
+    let services = [];
+    try {
+      const data = await API.get('/api/services/status');
+      services = data.services || [];
+    } catch (err) {
+      services = [];
+    }
+
+    const isTypeAvailable = (type) => {
+      const serviceName = this.connectionServiceMap[type];
+      const service = services.find(s => s.name === serviceName);
+      return !!(service && service.enabled);
+    };
+
+    const options = Object.entries(this.connectionTypes)
+      .map(([type, label]) => {
+        const available = isTypeAvailable(type);
+        return `<option value="${type}" ${available ? '' : 'disabled'}>${label}${available ? '' : ' (inactivo)'}</option>`;
+      })
+      .join('');
+
     Modal.show('Nuevo Usuario', `
       <form id="create-user-form">
         <div class="form-group">
@@ -93,6 +134,12 @@ const UsersModule = {
         <div class="form-group">
           <label>Contraseña</label>
           <input class="form-control" id="new-password" type="text" placeholder="contraseña" required />
+        </div>
+        <div class="form-group">
+          <label>Tipo de Conexión</label>
+          <select class="form-control" id="new-connection-type">
+            ${options}
+          </select>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -112,20 +159,36 @@ const UsersModule = {
       </button>
     `);
 
+    const connectionSelect = document.getElementById('new-connection-type');
+    if (connectionSelect && connectionSelect.options.length > 0) {
+      const firstEnabled = Array.from(connectionSelect.options).find(opt => !opt.disabled);
+      if (firstEnabled) {
+        connectionSelect.value = firstEnabled.value;
+      } else {
+        Toast.warning('No hay protocolos activos. Activa al menos uno en Servicios.');
+      }
+    }
+
     document.getElementById('btn-create-user').onclick = async () => {
       const username = document.getElementById('new-username').value.trim();
       const password = document.getElementById('new-password').value;
       const device_limit = parseInt(document.getElementById('new-device-limit').value);
       const expiry_date = document.getElementById('new-expiry').value;
+      const connection_type = document.getElementById('new-connection-type').value;
+
+      if (!isTypeAvailable(connection_type)) {
+        return Toast.error('Ese protocolo está inactivo. Actívalo en Servicios.');
+      }
 
       if (!username || !password || !expiry_date) {
         return Toast.error('Complete todos los campos');
       }
 
       try {
-        await API.post('/api/users', { username, password, device_limit, expiry_date });
+        const created = await API.post('/api/users', { username, password, device_limit, expiry_date, connection_type });
         Toast.success(`Usuario ${username} creado`);
         Modal.hide();
+        await this.showTicket(created.id, connection_type);
         this.render();
       } catch (err) {
         Toast.error(err.message);
@@ -148,6 +211,17 @@ const UsersModule = {
           <div class="form-group">
             <label>Nueva Contraseña (dejar vacío para no cambiar)</label>
             <input class="form-control" id="edit-password" type="text" placeholder="nueva contraseña" />
+          </div>
+          <div class="form-group">
+            <label>Tipo de Conexión</label>
+            <select class="form-control" id="edit-connection-type">
+              <option value="ssh" ${user.connection_type === 'ssh' ? 'selected' : ''}>SSH Directo</option>
+              <option value="ssl" ${user.connection_type === 'ssl' ? 'selected' : ''}>SSL/TLS (Stunnel)</option>
+              <option value="websocket" ${user.connection_type === 'websocket' ? 'selected' : ''}>WebSocket</option>
+              <option value="squid" ${user.connection_type === 'squid' ? 'selected' : ''}>Squid Proxy</option>
+              <option value="v2ray" ${user.connection_type === 'v2ray' ? 'selected' : ''}>V2Ray</option>
+              <option value="hysteria" ${user.connection_type === 'hysteria' ? 'selected' : ''}>Hysteria 2</option>
+            </select>
           </div>
           <div class="form-row">
             <div class="form-group">
@@ -172,10 +246,12 @@ const UsersModule = {
         const password = document.getElementById('edit-password').value;
         const device_limit = parseInt(document.getElementById('edit-device-limit').value);
         const expiry_date = document.getElementById('edit-expiry').value;
+        const connection_type = document.getElementById('edit-connection-type').value;
 
         if (password) body.password = password;
         if (device_limit) body.device_limit = device_limit;
         if (expiry_date) body.expiry_date = expiry_date;
+        body.connection_type = connection_type;
 
         try {
           await API.put(`/api/users/${id}`, body);
@@ -227,13 +303,20 @@ const UsersModule = {
     };
   },
 
-  async showTicket(id) {
+  async showTicket(id, selectedType) {
     try {
-      const data = await API.get(`/api/users/${id}/ticket`);
+      const query = selectedType ? `?type=${encodeURIComponent(selectedType)}` : '';
+      const data = await API.get(`/api/users/${id}/ticket${query}`);
       const ticket = data.ticket;
       const services = ticket.services || [];
       const getPort = (name) => services.find(s => s.name === name)?.port || '—';
       const domain = ticket.domain || window.location.hostname;
+      const guide = ticket.guide || null;
+      const guideSteps = guide && guide.steps
+        ? guide.steps.map((step, idx) => `${idx + 1}. ${step}`).join('\n')
+        : '1. Configura los datos del ticket en tu app.\n2. Guarda el perfil.\n3. Conecta.';
+      const selectedPort = guide && guide.port ? guide.port : 'No disponible';
+      const selectedStatus = guide && guide.enabled ? 'ACTIVO' : 'NO ACTIVO';
       
       const ticketText = `╔══════════════════════════════════════════╗
 ║     🏠 Tu Acceso - La Casita Panel       ║
@@ -243,15 +326,28 @@ const UsersModule = {
 📅 Expira: ${Utils.formatDate(ticket.expiry_date)}
 🌐 Host: ${domain}
 
+🎯 MÉTODO SELECCIONADO:
+- Tipo: ${ticket.connection_label || 'SSH Directo'}
+- Puerto: ${selectedPort}
+- Estado servicio: ${selectedStatus}
+
 🚀 SERVICIOS ACTIVOS:
 - SSH Directo: ${getPort('ssh')}
 - SSL/TLS: ${getPort('stunnel')}
 - WebSocket: ${getPort('websocket')}
 - Squid Proxy: ${getPort('squid')}
+- V2Ray: ${getPort('v2ray')}
+- Hysteria: ${getPort('hysteria')}
 - BadVPN (UDP): ${getPort('badvpn')}
 
 🔗 PAYLOAD WS:
-${ticket.payload || `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`}`;
+${ticket.payload || `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`}
+
+📱 APP RECOMENDADA:
+${guide && guide.app ? guide.app : 'Cliente compatible con el protocolo elegido'}
+
+🧭 PASO A PASO:
+${guideSteps}`;
 
       Modal.show('Ticket de Usuario', `
         <div class="ticket-container">

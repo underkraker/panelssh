@@ -6,6 +6,97 @@ const credentials = require('../services/credentials');
 
 const router = express.Router();
 
+const CONNECTION_METHODS = {
+  ssh: {
+    label: 'SSH Directo',
+    service: 'ssh',
+    app: 'HTTP Injector / HTTP Custom / NapsternetV',
+    steps: [
+      'Abre tu app de tunel SSH.',
+      'Crea un perfil tipo SSH con Host, Puerto, Usuario y Password.',
+      'Guarda y conecta.'
+    ]
+  },
+  ssl: {
+    label: 'SSL/TLS (Stunnel)',
+    service: 'stunnel',
+    app: 'HTTP Injector / HTTP Custom (SSL)',
+    steps: [
+      'Abre tu app y selecciona modo SSL/TLS.',
+      'Configura SNI con el dominio del ticket.',
+      'Ingresa Host, Puerto SSL, Usuario y Password.',
+      'Guarda y conecta.'
+    ]
+  },
+  websocket: {
+    label: 'WebSocket',
+    service: 'websocket',
+    app: 'HTTP Custom / HTTP Injector (WS)',
+    steps: [
+      'Selecciona modo WebSocket/WS en tu app.',
+      'Configura Host, Puerto WS, Usuario y Password.',
+      'Copia el payload WS del ticket.',
+      'Guarda y conecta.'
+    ]
+  },
+  squid: {
+    label: 'Proxy Squid',
+    service: 'squid',
+    app: 'HTTP Custom / HTTP Injector (Proxy)',
+    steps: [
+      'Configura tu app con proxy HTTP.',
+      'Ingresa Host y Puerto de Squid.',
+      'Usa el usuario/password SSH para autenticar el tunel.',
+      'Guarda y conecta.'
+    ]
+  },
+  v2ray: {
+    label: 'V2Ray (VMess/VLESS)',
+    service: 'v2ray',
+    app: 'v2rayNG / v2rayN / NekoBox',
+    steps: [
+      'Abre tu cliente V2Ray y agrega perfil manual.',
+      'Configura servidor con Host y Puerto V2Ray del ticket.',
+      'Usa transporte WebSocket con path /vmess o /vless.',
+      'Si no tienes UUID, solicitalo al administrador del panel.'
+    ]
+  },
+  hysteria: {
+    label: 'Hysteria 2',
+    service: 'hysteria',
+    app: 'NekoBox / sing-box / Hiddify Next',
+    steps: [
+      'Abre tu cliente compatible con Hysteria 2.',
+      'Configura server con Host y Puerto Hysteria del ticket.',
+      'Ingresa la contraseña del servicio Hysteria.',
+      'Guarda y conecta.'
+    ]
+  }
+};
+
+function normalizeConnectionType(value) {
+  const key = String(value || 'ssh').toLowerCase();
+  return CONNECTION_METHODS[key] ? key : 'ssh';
+}
+
+function buildConnectionGuide(connectionType, domain, services) {
+  const type = normalizeConnectionType(connectionType);
+  const method = CONNECTION_METHODS[type];
+  const service = services.find(svc => svc.name === method.service);
+  const payload = `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`;
+
+  return {
+    type,
+    label: method.label,
+    app: method.app,
+    host: domain,
+    port: service ? service.port : null,
+    enabled: service ? !!service.enabled : false,
+    payload,
+    steps: method.steps
+  };
+}
+
 function logAction(adminId, action, target, details, ip) {
   db.prepare('INSERT INTO logs (admin_id, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?)')
     .run(adminId, action, target, details, ip);
@@ -20,6 +111,7 @@ router.get('/', requireAuth, (req, res) => {
     users = db.prepare(`
       SELECT
         u.id, u.username, u.device_limit, u.expiry_date, u.created_by,
+        u.connection_type,
         u.status, u.created_at,
         a.username as created_by_name
       FROM users u LEFT JOIN admins a ON u.created_by = a.id 
@@ -30,6 +122,7 @@ router.get('/', requireAuth, (req, res) => {
     users = db.prepare(`
       SELECT
         u.id, u.username, u.device_limit, u.expiry_date, u.created_by,
+        u.connection_type,
         u.status, u.created_at,
         a.username as created_by_name
       FROM users u LEFT JOIN admins a ON u.created_by = a.id 
@@ -51,8 +144,17 @@ router.get('/', requireAuth, (req, res) => {
 // POST /api/users — create user
 router.post('/', requireAuth, (req, res) => {
   const { user } = req.session;
-  const { username, password, device_limit, expiry_date } = req.body;
+  const { username, password, device_limit, expiry_date, connection_type } = req.body;
   const ip = req.ip;
+  const selectedConnection = normalizeConnectionType(connection_type);
+
+  const selectedMethod = CONNECTION_METHODS[selectedConnection];
+  const selectedService = db.prepare('SELECT * FROM service_ports WHERE name = ?').get(selectedMethod.service);
+  if (!selectedService || !selectedService.enabled) {
+    return res.status(400).json({
+      error: `El protocolo ${selectedMethod.label} no está activo. Actívelo en Servicios antes de crear el usuario.`
+    });
+  }
   
   if (!username || !password || !expiry_date) {
     return res.status(400).json({ error: 'Nombre, contraseña y fecha de expiración son requeridos.' });
@@ -80,15 +182,15 @@ router.post('/', requireAuth, (req, res) => {
     
     // Insert in database
     const result = db.prepare(
-      'INSERT INTO users (username, password, password_encrypted, device_limit, expiry_date, created_by) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(username, '[secure]', encryptedPassword, device_limit || 1, expiry_date, user.id);
+      'INSERT INTO users (username, password, password_encrypted, connection_type, device_limit, expiry_date, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(username, '[secure]', encryptedPassword, selectedConnection, device_limit || 1, expiry_date, user.id);
     
     // Deduct reseller credit
     if (user.role === 'reseller') {
       db.prepare('UPDATE admins SET credits = credits - 1 WHERE id = ?').run(user.id);
     }
     
-    logAction(user.id, 'user_create', username, `Creado con expiración ${expiry_date}, límite ${device_limit || 1}`, ip);
+    logAction(user.id, 'user_create', username, `Creado con expiración ${expiry_date}, límite ${device_limit || 1}, conexión ${selectedConnection}`, ip);
     
     res.json({ success: true, id: result.lastInsertRowid });
   } catch (err) {
@@ -101,7 +203,7 @@ router.post('/', requireAuth, (req, res) => {
 router.put('/:id', requireAuth, (req, res) => {
   const { user } = req.session;
   const { id } = req.params;
-  const { password, device_limit, expiry_date } = req.body;
+  const { password, device_limit, expiry_date, connection_type } = req.body;
   const ip = req.ip;
   
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -124,6 +226,10 @@ router.put('/:id', requireAuth, (req, res) => {
     if (expiry_date) {
       systemUsers.setExpiry(target.username, expiry_date);
       db.prepare('UPDATE users SET expiry_date = ? WHERE id = ?').run(expiry_date, id);
+    }
+    if (connection_type !== undefined) {
+      const selectedConnection = normalizeConnectionType(connection_type);
+      db.prepare('UPDATE users SET connection_type = ? WHERE id = ?').run(selectedConnection, id);
     }
     
     logAction(user.id, 'user_edit', target.username, `Editado: ${JSON.stringify(req.body)}`, ip);
@@ -163,11 +269,12 @@ router.get('/me/config', requireAuth, (req, res) => {
   try {
     const services = db.prepare('SELECT name, port FROM service_ports WHERE enabled = 1').all();
     const domain = require('../config').DOMAIN || 'localhost';
-    const panelUser = db.prepare('SELECT expiry_date FROM users WHERE username = ?').get(user.username);
+    const panelUser = db.prepare('SELECT expiry_date, connection_type FROM users WHERE username = ?').get(user.username);
     
     res.json({
       username: user.username,
       expiry_date: panelUser ? panelUser.expiry_date : null,
+      connection_type: panelUser ? normalizeConnectionType(panelUser.connection_type) : 'ssh',
       domain: domain,
       services: services,
       payload: `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`
@@ -262,17 +369,22 @@ router.get('/:id/ticket', requireAuth, (req, res) => {
     password = target.password;
   }
 
-  const services = db.prepare('SELECT name, port FROM service_ports WHERE enabled = 1').all();
+  const selectedConnection = normalizeConnectionType(req.query.type || target.connection_type);
+  const services = db.prepare('SELECT name, port, enabled FROM service_ports').all();
   const domain = require('../config').DOMAIN || 'localhost';
+  const guide = buildConnectionGuide(selectedConnection, domain, services);
 
   res.json({
     ticket: {
       username: target.username,
       password: password || 'No disponible',
       expiry_date: target.expiry_date,
+      connection_type: guide.type,
+      connection_label: guide.label,
       domain,
       services,
-      payload: `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`
+      payload: guide.payload,
+      guide
     }
   });
 });

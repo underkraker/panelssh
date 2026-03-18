@@ -23,6 +23,70 @@ const portMonitor = require('./services/port-monitor');
 const cleanupExpired = require('./cron/cleanup-expired');
 const cleanupDemos = require('./cron/cleanup-demos');
 
+const serviceModules = {
+  ssh: require('./services/ssh'),
+  stunnel: require('./services/stunnel'),
+  squid: require('./services/squid'),
+  v2ray: require('./services/v2ray'),
+  websocket: require('./services/websocket'),
+  badvpn: require('./services/badvpn'),
+  hysteria: require('./services/hysteria')
+};
+
+function startEnabledServices() {
+  const services = db.prepare('SELECT * FROM service_ports WHERE enabled = 1').all();
+  services.forEach(svc => {
+    const mod = serviceModules[svc.name];
+    if (!mod) return;
+
+    const targetPort = svc.name === 'ssh' ? 22 : svc.port;
+    if (svc.name === 'ssh' && svc.port !== 22) {
+      db.prepare('UPDATE service_ports SET port = 22 WHERE name = ?').run('ssh');
+    }
+
+    console.log(`[AutoStart] Iniciando ${svc.name} en puerto ${targetPort}...`);
+    try {
+      mod.start(targetPort);
+    } catch (e) {
+      console.error(`[AutoStart] Error al iniciar ${svc.name}:`, e.message);
+    }
+  });
+}
+
+function startServiceWatchdog() {
+  const isRoot = process.getuid && process.getuid() === 0;
+  if (!isRoot) return;
+
+  setInterval(() => {
+    try {
+      const enabledServices = db.prepare('SELECT * FROM service_ports WHERE enabled = 1').all();
+      for (const svc of enabledServices) {
+        const mod = serviceModules[svc.name];
+        if (!mod || typeof mod.isRunning !== 'function') continue;
+
+        let running = false;
+        try {
+          running = !!mod.isRunning();
+        } catch (e) {
+          running = false;
+        }
+
+        if (!running) {
+          const targetPort = svc.name === 'ssh' ? 22 : svc.port;
+          console.warn(`[Watchdog] ${svc.name} caído, reiniciando en puerto ${targetPort}...`);
+          try {
+            mod.start(targetPort);
+          } catch (restartErr) {
+            console.error(`[Watchdog] Error al reiniciar ${svc.name}:`, restartErr.message);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[Watchdog] Error general:', err.message);
+    }
+  }, 30000);
+}
+
 // ── Express App ──────────────────────────────────────────────
 const app = express();
 const server = http.createServer(app);
@@ -196,28 +260,8 @@ server.listen(PORT, '0.0.0.0', () => {
 
   // Auto-start enabled services
   try {
-    const services = db.prepare('SELECT * FROM service_ports WHERE enabled = 1').all();
-    const serviceModules = {
-      ssh: require('./services/ssh'),
-      stunnel: require('./services/stunnel'),
-      squid: require('./services/squid'),
-      v2ray: require('./services/v2ray'),
-      websocket: require('./services/websocket'),
-      badvpn: require('./services/badvpn'),
-      hysteria: require('./services/hysteria')
-    };
-
-    services.forEach(svc => {
-      const mod = serviceModules[svc.name];
-      if (mod) {
-        console.log(`[AutoStart] Iniciando ${svc.name} en puerto ${svc.port}...`);
-        try {
-          mod.start(svc.port);
-        } catch (e) {
-          console.error(`[AutoStart] Error al iniciar ${svc.name}:`, e.message);
-        }
-      }
-    });
+    startEnabledServices();
+    startServiceWatchdog();
   } catch (err) {
     console.error('[AutoStart] Error al cargar servicios:', err.message);
   }

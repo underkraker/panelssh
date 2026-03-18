@@ -1,5 +1,7 @@
 // Services Module
 const ServicesModule = {
+  healthData: null,
+
   serviceIcons: {
     ssh: 'fa-terminal',
     stunnel: 'fa-shield-halved',
@@ -35,15 +37,46 @@ const ServicesModule = {
     content.innerHTML = '<div class="spinner"></div>';
 
     try {
-      const data = await API.get('/api/services/status');
-      const services = data.services || [];
+      const [statusData, healthData] = await Promise.all([
+        API.get('/api/services/status'),
+        API.get('/api/services/health').catch(() => ({ summary: null, protocols: [] }))
+      ]);
+      const services = statusData.services || [];
+      this.healthData = healthData;
+
+      const healthySummary = healthData.summary
+        ? `<span style="color:${healthData.summary.allGood ? 'var(--green)' : 'var(--orange)'}"><i class="fas fa-heart-pulse"></i> ${healthData.summary.healthy}/${healthData.summary.enabled} protocolos OK</span>`
+        : '<span style="color:var(--text-secondary)"><i class="fas fa-heart-pulse"></i> Diagnóstico no disponible</span>';
+
+      const protocolBadges = (healthData.protocols || []).map(p => {
+        const color = p.ready ? 'badge-green' : (p.enabled ? 'badge-orange' : 'badge-red');
+        const label = p.ready ? 'OK' : (p.enabled ? 'Falla' : 'Off');
+        return `<span class="badge ${color}" title="${p.issues && p.issues.length ? Utils.escapeHtml(p.issues.join(' | ')) : ''}">${Utils.escapeHtml(p.label)}: ${label}</span>`;
+      }).join(' ');
+
+      const repairButton = App.user && App.user.role === 'admin'
+        ? '<button class="btn btn-outline" onclick="ServicesModule.repairServices()"><i class="fas fa-screwdriver-wrench"></i> Auto-reparar</button>'
+        : '';
 
       content.innerHTML = `
         <div class="toolbar">
           <div class="toolbar-left">
             <span style="color:var(--text-secondary)"><i class="fas fa-server"></i> ${services.filter(s => s.running).length}/${services.length} servicios activos</span>
+            ${healthySummary}
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${repairButton}
           </div>
         </div>
+
+        ${(healthData.protocols && healthData.protocols.length > 0) ? `
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-stethoscope"></i> Salud de Protocolos (HTTP Custom / HTTP Injector)</h3>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">${protocolBadges}</div>
+          </div>
+        ` : ''}
 
         <div class="service-grid" id="services-grid">
           ${services.map(s => this.renderServiceCard(s)).join('')}
@@ -59,6 +92,17 @@ const ServicesModule = {
     const name = this.serviceNames[s.name] || s.name;
     const desc = this.serviceDescriptions[s.name] || '';
     const running = !!s.running;
+    const protectedService = s.name === 'ssh';
+    const health = this.healthData && this.healthData.services
+      ? this.healthData.services.find(x => x.name === s.name)
+      : null;
+    const healthBadge = health
+      ? (health.healthy
+          ? '<span class="badge badge-green">Salud: OK</span>'
+          : (health.enabled
+              ? `<span class="badge badge-orange" title="${Utils.escapeHtml((health.issues || []).join(' | '))}">Salud: Falla</span>`
+              : '<span class="badge badge-red">Salud: Inactivo</span>'))
+      : '<span class="badge badge-blue">Salud: N/D</span>';
 
     return `
       <div class="service-card ${running ? 'running' : 'stopped'}" data-service="${s.name}">
@@ -68,11 +112,11 @@ const ServicesModule = {
             ${name}
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" ${running ? 'checked' : ''} onchange="ServicesModule.toggleService('${s.name}')">
+            <input type="checkbox" ${running ? 'checked' : ''} ${protectedService ? 'disabled' : ''} onchange="ServicesModule.toggleService('${s.name}')">
             <span class="toggle-slider"></span>
           </label>
         </div>
-        <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:14px">${desc}</p>
+        <p style="color:var(--text-secondary);font-size:0.82rem;margin-bottom:14px">${desc}${protectedService ? ' SSH puerto 22 protegido siempre activo.' : ''}</p>
         <div class="service-info">
           <div class="service-info-item">
             <i class="fas fa-network-wired"></i>
@@ -83,8 +127,22 @@ const ServicesModule = {
             ${running ? 'Activo' : 'Inactivo'}
           </div>
         </div>
+        <div style="margin-top:10px">${healthBadge}</div>
       </div>
     `;
+  },
+
+  async repairServices() {
+    try {
+      Toast.info('Ejecutando auto-reparación de protocolos...');
+      const result = await API.post('/api/services/health/repair');
+      const repairedText = result.repaired && result.repaired.length ? result.repaired.join(', ') : 'ninguno';
+      Toast.success(`Auto-reparación completa. Reiniciados: ${repairedText}`);
+      this.render();
+    } catch (err) {
+      Toast.error(err.message);
+      this.render();
+    }
   },
 
   async toggleService(name) {
