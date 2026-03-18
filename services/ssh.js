@@ -13,14 +13,31 @@ function exec(cmd) {
 
 function start(port) {
   if (isRoot) {
-    // Update SSH config port
+    // Update SSH config: Port and Authentication
     const configFile = '/etc/ssh/sshd_config';
-    let config = fs.readFileSync(configFile, 'utf8');
-    config = config.replace(/^#?Port\s+\d+/m, `Port ${port}`);
-    if (!/^Port\s/m.test(config)) {
-      config = `Port ${port}\n${config}`;
+    let configStr = fs.readFileSync(configFile, 'utf8');
+    
+    // Change Port
+    configStr = configStr.replace(/^#?Port\s+\d+/m, `Port ${port}`);
+    if (!/^Port\s/m.test(configStr)) configStr = `Port ${port}\n${configStr}`;
+    
+    // Ensure Password Auth and Root Login
+    const settings = {
+      'PasswordAuthentication': 'yes',
+      'PermitRootLogin': 'yes',
+      'PubkeyAuthentication': 'yes'
+    };
+    
+    for (const [key, val] of Object.entries(settings)) {
+      const regex = new RegExp(`^#?${key}\\s+.*`, 'm');
+      if (regex.test(configStr)) {
+        configStr = configStr.replace(regex, `${key} ${val}`);
+      } else {
+        configStr += `\n${key} ${val}`;
+      }
     }
-    fs.writeFileSync(configFile, config);
+    
+    fs.writeFileSync(configFile, configStr);
     exec('systemctl restart sshd');
   }
   console.log(`[SSH] Iniciado en puerto ${port}`);

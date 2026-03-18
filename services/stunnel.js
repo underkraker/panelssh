@@ -12,7 +12,16 @@ function exec(cmd) {
   return execSync(cmd, { encoding: 'utf8', timeout: 10000 });
 }
 
+const db = require('../database/db');
+
 function generateConfig(port) {
+  // Get current SSH port from DB
+  let sshPort = 22;
+  try {
+    const svc = db.prepare('SELECT port FROM service_ports WHERE name = ?').get('ssh');
+    if (svc) sshPort = svc.port;
+  } catch (e) {}
+
   return `pid = /var/run/stunnel4/stunnel.pid
 cert = ${config.SSL_CERT}
 key = ${config.SSL_KEY}
@@ -23,7 +32,7 @@ socket = r:TCP_NODELAY=1
 
 [ssh-ssl]
 accept = 0.0.0.0:${port}
-connect = 127.0.0.1:22
+connect = 127.0.0.1:${sshPort}
 `;
 }
 

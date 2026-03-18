@@ -125,6 +125,13 @@ apt-get install -y \
 echo "ENABLED=1" > /etc/default/stunnel4
 systemctl enable stunnel4 2>/dev/null || true
 
+# ── Harden SSH Config (Mobile Compatibility) ──────────────
+echo -e "${BLUE}Configurando SSH para compatibilidad móvil...${NC}"
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+systemctl restart sshd
+
 echo -e "${GREEN}✓ Dependencias del sistema instaladas${NC}"
 
 # ... (Previous Node.js and SSL sections continue) ...
