@@ -2,7 +2,7 @@ const { execSync } = require('child_process');
 
 const isRoot = process.getuid && process.getuid() === 0;
 
-function exec(cmd) {
+function exec(cmd, ignoreError = false) {
   if (!isRoot) {
     console.log(`[System] (simulado) ${cmd}`);
     return '';
@@ -10,6 +10,10 @@ function exec(cmd) {
   try {
     return execSync(cmd, { encoding: 'utf8', timeout: 10000 });
   } catch (err) {
+    if (ignoreError) {
+      console.warn(`[System] Ignored error for: ${cmd}`);
+      return '';
+    }
     console.error(`[System] Error: ${cmd}`, err.message);
     throw err;
   }
@@ -17,15 +21,16 @@ function exec(cmd) {
 
 function createSystemUser(username, password, expiryDate) {
   // Create Linux user with shell /bin/false for SSH tunnel only
-  exec(`useradd -M -s /bin/false -e ${expiryDate} ${username}`);
+  // ignoreError=true in case user already exists in system
+  exec(`useradd -M -s /bin/false -e ${expiryDate} ${username}`, true);
   exec(`echo "${username}:${password}" | chpasswd`);
   console.log(`[System] Usuario creado: ${username}, expira: ${expiryDate}`);
 }
 
 function deleteSystemUser(username) {
   // Kill active sessions first
-  try { exec(`pkill -u ${username}`); } catch (e) {}
-  exec(`userdel -f ${username}`);
+  exec(`pkill -u ${username}`, true);
+  exec(`userdel -f ${username}`, true);
   console.log(`[System] Usuario eliminado: ${username}`);
 }
 

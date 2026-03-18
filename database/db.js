@@ -106,7 +106,8 @@ const defaultServices = [
   { name: 'stunnel', port: 443, enabled: 0 },
   { name: 'squid', port: 3128, enabled: 0 },
   { name: 'v2ray', port: 10085, enabled: 0 },
-  { name: 'websocket', port: 8880, enabled: 0 }
+  { name: 'websocket', port: 8880, enabled: 0 },
+  { name: 'badvpn', port: 7300, enabled: 0 }
 ];
 
 const insertService = db.prepare('INSERT OR IGNORE INTO service_ports (name, port, enabled) VALUES (?, ?, ?)');

@@ -183,6 +183,18 @@ if ! command -v xray &> /dev/null; then
 fi
 echo -e "${GREEN}✓ V2Ray/Xray configurado${NC}"
 
+# ── Install BadVPN (UDP Gateway) ──────────────────────────
+echo ""
+echo -e "${BLUE}[7.5/10] Instalando BadVPN (UDP Gateway)...${NC}"
+if ! command -v badvpn-udpgw &> /dev/null; then
+  wget -O /usr/local/bin/badvpn-udpgw "https://github.com/ambrop72/badvpn/raw/master/udpgw/badvpn-udpgw" 2>/dev/null || {
+    # Fallback to a known precompiled static binary if the above repo changes
+    wget -O /usr/local/bin/badvpn-udpgw "https://raw.githubusercontent.com/daybreakersx/premscript/master/badvpn-udpgw64" 2>/dev/null
+  }
+  chmod +x /usr/local/bin/badvpn-udpgw
+fi
+echo -e "${GREEN}✓ BadVPN configurado${NC}"
+
 # ── Deploy Panel ──────────────────────────────────────────
 echo ""
 echo -e "${BLUE}[8/10] Desplegando Panel La Casita...${NC}"
@@ -253,6 +265,8 @@ ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
 ufw allow 8880/tcp
+ufw allow 7300/tcp
+ufw allow 7300/udp
 ufw --force enable 2>/dev/null || true
 
 # ── Done & Diagnostic ─────────────────────────────────────

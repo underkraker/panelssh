@@ -10,7 +10,7 @@ function getPortStatus() {
   const status = {};
   
   try {
-    const ssOutput = execSync('ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null', { 
+    const ssOutput = execSync('ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null', { 
       encoding: 'utf8', timeout: 5000 
     });
     

@@ -136,7 +136,8 @@ server.listen(PORT, '0.0.0.0', () => {
       stunnel: require('./services/stunnel'),
       squid: require('./services/squid'),
       v2ray: require('./services/v2ray'),
-      websocket: require('./services/websocket')
+      websocket: require('./services/websocket'),
+      badvpn: require('./services/badvpn')
     };
 
     services.forEach(svc => {

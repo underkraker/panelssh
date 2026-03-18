@@ -5,7 +5,8 @@ const ServicesModule = {
     stunnel: 'fa-shield-halved',
     squid: 'fa-globe',
     v2ray: 'fa-rocket',
-    websocket: 'fa-plug'
+    websocket: 'fa-plug',
+    badvpn: 'fa-gamepad'
   },
 
   serviceNames: {
@@ -13,7 +14,8 @@ const ServicesModule = {
     stunnel: 'SSL/TLS (Stunnel)',
     squid: 'Squid Proxy',
     v2ray: 'V2Ray / Xray',
-    websocket: 'WebSocket Tunnel'
+    websocket: 'WebSocket Tunnel',
+    badvpn: 'BadVPN (UDP Gateway)'
   },
 
   serviceDescriptions: {
@@ -21,7 +23,8 @@ const ServicesModule = {
     stunnel: 'Túnel SSL/TLS con certificados Let\'s Encrypt.',
     squid: 'Proxy HTTP con cabeceras para HTTP Custom / Injector.',
     v2ray: 'Protocolos VMess y VLESS con transporte WebSocket.',
-    websocket: 'Túnel WebSocket para aplicaciones como HTTP Custom.'
+    websocket: 'Túnel WebSocket para aplicaciones como HTTP Custom.',
+    badvpn: 'Soporte para juegos y llamadas (UDP Gateway Port 7300).'
   },
 
   async render() {
