@@ -15,7 +15,8 @@ const serviceModules = {
   squid: squidService,
   v2ray: v2rayService,
   websocket: websocketService,
-  badvpn: require('../services/badvpn')
+  badvpn: require('../services/badvpn'),
+  hysteria: require('../services/hysteria')
 };
 
 // GET /api/services/status — get all service status

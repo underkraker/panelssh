@@ -54,6 +54,26 @@ const DashboardModule = {
           `}
         </div>
 
+        <div class="dashboard-charts">
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-chart-pie"></i> Estado de Usuarios</h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="userStatusChart"></canvas>
+            </div>
+          </div>
+          
+          <div class="card chart-card">
+            <div class="card-header">
+              <h3 class="card-title"><i class="fas fa-chart-bar"></i> Distribución de Servicios</h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="servicesChart"></canvas>
+            </div>
+          </div>
+        </div>
+
         ${data.recentLogs && data.recentLogs.length > 0 ? `
         <div class="card">
           <div class="card-header">
@@ -84,6 +104,56 @@ const DashboardModule = {
         </div>
         ` : ''}
       `;
+
+      // Initialize Charts
+      setTimeout(() => {
+        const userCtx = document.getElementById('userStatusChart')?.getContext('2d');
+        if (userCtx) {
+          new Chart(userCtx, {
+            type: 'doughnut',
+            data: {
+              labels: ['Activos', 'Expirados', 'Baneados'],
+              datasets: [{
+                data: [data.activeUsers, data.expiredUsers, data.bannedUsers || 0],
+                backgroundColor: ['#22c55e', '#f59e0b', '#ef4444'],
+                borderWidth: 0,
+                hoverOffset: 10
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 10 } } }
+            }
+          });
+        }
+
+        const svcCtx = document.getElementById('servicesChart')?.getContext('2d');
+        if (svcCtx && data.serviceStats) {
+          new Chart(svcCtx, {
+            type: 'bar',
+            data: {
+              labels: ['Activos', 'Inactivos'],
+              datasets: [{
+                label: 'Servicios',
+                data: [data.serviceStats.active, data.serviceStats.inactive],
+                backgroundColor: ['#6366f1', '#1e293b'],
+                borderRadius: 6
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: { 
+                y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+              },
+              plugins: { legend: { display: false } }
+            }
+          });
+        }
+      }, 100);
+
     } catch (err) {
       content.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error cargando dashboard: ${err.message}</p></div>`;
     }

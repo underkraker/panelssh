@@ -6,7 +6,8 @@ const ServicesModule = {
     squid: 'fa-globe',
     v2ray: 'fa-rocket',
     websocket: 'fa-plug',
-    badvpn: 'fa-gamepad'
+    badvpn: 'fa-gamepad',
+    hysteria: 'fa-bolt'
   },
 
   serviceNames: {
@@ -15,7 +16,8 @@ const ServicesModule = {
     squid: 'Squid Proxy',
     v2ray: 'V2Ray / Xray',
     websocket: 'WebSocket Tunnel',
-    badvpn: 'BadVPN (UDP Gateway)'
+    badvpn: 'BadVPN (UDP Gateway)',
+    hysteria: 'Hysteria v2'
   },
 
   serviceDescriptions: {
@@ -24,7 +26,8 @@ const ServicesModule = {
     squid: 'Proxy HTTP con cabeceras para HTTP Custom / Injector.',
     v2ray: 'Protocolos VMess y VLESS con transporte WebSocket.',
     websocket: 'Túnel WebSocket para aplicaciones como HTTP Custom.',
-    badvpn: 'Soporte para juegos y llamadas (UDP Gateway Port 7300).'
+    badvpn: 'Soporte para juegos y llamadas (UDP Gateway Port 7300).',
+    hysteria: 'Protocolo de alta velocidad basado en UDP (brincando GFW).'
   },
 
   async render() {

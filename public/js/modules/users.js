@@ -70,6 +70,7 @@ const UsersModule = {
         <td>${Utils.escapeHtml(u.created_by_name || '—')}</td>
         <td>
           <div style="display:flex;gap:4px">
+            <button class="btn-icon" title="Ver Ticket" onclick="UsersModule.showTicket(${u.id})"><i class="fas fa-ticket"></i></button>
             <button class="btn-icon" title="Editar" onclick="UsersModule.showEditModal(${u.id})"><i class="fas fa-pen"></i></button>
             <button class="btn-icon" title="${u.status === 'banned' ? 'Desbanear' : 'Banear'}" onclick="UsersModule.toggleBan(${u.id})">
               <i class="fas fa-${u.status === 'banned' ? 'unlock' : 'ban'}"></i>
@@ -224,6 +225,64 @@ const UsersModule = {
         Toast.error(err.message);
       }
     };
+  },
+
+  async showTicket(id) {
+    try {
+      const [usersData, servicesData] = await Promise.all([
+        API.get('/api/users'),
+        API.get('/api/services/status')
+      ]);
+      
+      const user = usersData.users.find(u => u.id === id);
+      if (!user) return Toast.error('Usuario no encontrado');
+      
+      const services = servicesData.services || [];
+      const getPort = (name) => services.find(s => s.name === name)?.port || '—';
+      const domain = window.location.hostname;
+      
+      const ticketText = `╔══════════════════════════════════════════╗
+║     🏠 Tu Acceso - La Casita Panel       ║
+╚══════════════════════════════════════════╝
+👤 Usuario: ${user.username}
+🔑 Pass: ${user.password}
+📅 Expira: ${Utils.formatDate(user.expiry_date)}
+🌐 Host: ${domain}
+
+🚀 SERVICIOS ACTIVOS:
+- SSH Directo: ${getPort('ssh')}
+- SSL/TLS: ${getPort('stunnel')}
+- WebSocket: ${getPort('websocket')}
+- Squid Proxy: ${getPort('squid')}
+- BadVPN (UDP): ${getPort('badvpn')}
+
+🔗 PAYLOAD WS:
+GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`;
+
+      Modal.show('Ticket de Usuario', `
+        <div class="ticket-container">
+          <pre id="user-ticket-pre" class="ticket-pre">${ticketText}</pre>
+          <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 12px;">
+            <i class="fas fa-info-circle"></i> Puedes copiar este texto y enviarlo a tu cliente.
+          </p>
+        </div>
+      `, `
+        <button class="btn btn-outline" onclick="Modal.hide()">Cerrar</button>
+        <button class="btn btn-primary" id="btn-copy-ticket">
+          <i class="fas fa-copy"></i> Copiar Ticket
+        </button>
+      `);
+
+      document.getElementById('btn-copy-ticket').onclick = () => {
+        navigator.clipboard.writeText(ticketText).then(() => {
+          Toast.success('Ticket copiado al portapapeles');
+        }).catch(() => {
+          Toast.error('Error al copiar el ticket');
+        });
+      };
+    } catch (err) {
+      Toast.error(err.message);
+    }
   },
 
   deleteUser(id, username) {

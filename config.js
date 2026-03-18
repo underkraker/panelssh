@@ -24,6 +24,10 @@ module.exports = {
   // Port monitor interval (ms)
   PORT_MONITOR_INTERVAL: 5000,
   
+  // Telegram Bot (Optional)
+  TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
+  
   // Services default ports
   SERVICES: {
     ssh: { port: 22, configFile: '/etc/ssh/sshd_config' },

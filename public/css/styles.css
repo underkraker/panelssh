@@ -1015,3 +1015,50 @@ tbody tr:hover {
   .stat-card .stat-value { font-size: 1.6rem; }
   .modal { width: 95%; }
 }
+
+/* ── Ticket Styles ──────────────────────────────────────── */
+.ticket-container {
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid var(--border-light);
+}
+
+.ticket-pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--accent-hover);
+  background: rgba(0,0,0,0.2);
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  user-select: all;
+}
+
+/* ── Dashboard Charts ──────────────────────────────────── */
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.chart-card {
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container {
+  flex: 1;
+  position: relative;
+  min-height: 250px;
+  width: 100%;
+}
+
+@media (max-width: 480px) {
+  .dashboard-charts { grid-template-columns: 1fr; }
+  .chart-card { min-height: 350px; }
+}

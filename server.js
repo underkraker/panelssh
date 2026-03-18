@@ -53,6 +53,7 @@ app.use('/api/demos', require('./routes/demos'));
 app.use('/api/resellers', require('./routes/resellers'));
 app.use('/api/services', require('./routes/services'));
 app.use('/api/logs', require('./routes/logs'));
+app.use('/api/settings', require('./routes/settings'));
 
 // Dashboard stats endpoint
 app.get('/api/dashboard', (req, res) => {
@@ -72,6 +73,10 @@ app.get('/api/dashboard', (req, res) => {
       activeDemos: db.prepare("SELECT COUNT(*) as c FROM demos WHERE status = 'active'").get().c,
       totalResellers: db.prepare("SELECT COUNT(*) as c FROM admins WHERE role = 'reseller'").get().c,
       activeServices: db.prepare('SELECT COUNT(*) as c FROM service_ports WHERE enabled = 1').get().c,
+      serviceStats: {
+        active: db.prepare('SELECT COUNT(*) as c FROM service_ports WHERE enabled = 1').get().c,
+        inactive: db.prepare('SELECT COUNT(*) as c FROM service_ports WHERE enabled = 0').get().c
+      },
       recentLogs: db.prepare('SELECT l.*, a.username as admin_name FROM logs l LEFT JOIN admins a ON l.admin_id = a.id ORDER BY l.created_at DESC LIMIT 10').all()
     };
   } else {
@@ -137,7 +142,8 @@ server.listen(PORT, '0.0.0.0', () => {
       squid: require('./services/squid'),
       v2ray: require('./services/v2ray'),
       websocket: require('./services/websocket'),
-      badvpn: require('./services/badvpn')
+      badvpn: require('./services/badvpn'),
+      hysteria: require('./services/hysteria')
     };
 
     services.forEach(svc => {

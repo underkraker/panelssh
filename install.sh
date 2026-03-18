@@ -195,6 +195,18 @@ if ! command -v badvpn-udpgw &> /dev/null; then
 fi
 echo -e "${GREEN}✓ BadVPN configurado${NC}"
 
+# ── Install Hysteria 2 ─────────────────────────────────────
+echo ""
+echo -e "${BLUE}[7.6/10] Instalando Hysteria v2...${NC}"
+if ! command -v hysteria &> /dev/null; then
+  # Download Hysteria 2 - static binary for Linux x86_64
+  # Note: Version is pinned for stability
+  HYSTERIA_VER="v2.5.2"
+  wget -O /usr/local/bin/hysteria "https://github.com/apernet/hysteria/releases/download/app%2F${HYSTERIA_VER}/hysteria-linux-amd64" 2>/dev/null
+  chmod +x /usr/local/bin/hysteria
+fi
+echo -e "${GREEN}✓ Hysteria configurado${NC}"
+
 # ── Deploy Panel ──────────────────────────────────────────
 echo ""
 echo -e "${BLUE}[8/10] Desplegando Panel La Casita...${NC}"
@@ -259,15 +271,21 @@ systemctl start lacasita
 
 # ── Firewall ──────────────────────────────────────────────
 echo ""
-echo -e "${BLUE}[10/10] Configurando Firewall...${NC}"
-ufw allow $PANEL_PORT/tcp
+echo -e "${BLUE}[9/10] Configurando Firewall (UFW)...${NC}"
+apt install -y ufw wireguard &> /dev/null
+ufw --force reset
+ufw default deny incoming
+ufw default allow outgoing
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
-ufw allow 8880/tcp
-ufw allow 7300/tcp
+ufw allow 2026/tcp
+ufw allow 3128/tcp
 ufw allow 7300/udp
-ufw --force enable 2>/dev/null || true
+ufw allow 4434/udp
+ufw allow 51820/udp
+ufw --force enable
+echo -e "${GREEN}✓ Firewall configurado${NC}"
 
 # ── Done & Diagnostic ─────────────────────────────────────
 echo ""
