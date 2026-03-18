@@ -90,6 +90,7 @@ echo -e "${BLUE}[3/8] Instalando dependencias del sistema...${NC}"
 apt-get update -y
 apt-get install -y \
   curl wget unzip \
+  build-essential \
   ufw \
   stunnel4 \
   squid \
