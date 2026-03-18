@@ -148,6 +148,25 @@ router.delete('/:id', requireAuth, (req, res) => {
   }
 });
 
+// GET /api/users/me/config — for Android app sync
+router.get('/me/config', requireAuth, (req, res) => {
+  const { user } = req.session;
+  try {
+    const services = db.prepare('SELECT name, port FROM service_ports WHERE enabled = 1').all();
+    const domain = require('../config').DOMAIN || 'localhost';
+    
+    res.json({
+      username: user.username,
+      expiry_date: user.expiry_date,
+      domain: domain,
+      services: services,
+      payload: `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/users/:id/ban — ban/unban user
 router.post('/:id/ban', requireAuth, (req, res) => {
   const { user } = req.session;
