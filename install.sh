@@ -139,15 +139,28 @@ echo ""
 echo -e "${BLUE}[6/10] Configurando SSL (Let's Encrypt)...${NC}"
 apt-get install -y certbot
 
+# Pre-open port 80 for Certbot
+ufw allow 80/tcp 2>/dev/null || true
+
 # Stop services that might use port 80
 systemctl stop nginx 2>/dev/null || true
 systemctl stop apache2 2>/dev/null || true
 
+# Try Let's Encrypt
+CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
 certbot certonly --standalone --agree-tos --register-unsafely-without-email \
   -d $DOMAIN --non-interactive || {
-  echo -e "${YELLOW}[WARN] No se pudo obtener certificado SSL. Se usará HTTP.${NC}"
+  echo -e "${YELLOW}[WARN] No se pudo obtener certificado SSL real.${NC}"
+  
+  # Fallback: Self-signed certificate so Stunnel can still start
+  echo -e "${BLUE}Generando certificado auto-firmado de respaldo...${NC}"
+  mkdir -p "$CERT_DIR"
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout "$CERT_DIR/privkey.pem" \
+    -out "$CERT_DIR/fullchain.pem" \
+    -subj "/C=US/ST=State/L=City/O=LaCasita/OU=Dev/CN=$DOMAIN"
 }
-echo -e "${GREEN}✓ SSL configurado${NC}"
+echo -e "${GREEN}✓ SSL configurado (Certificado en $CERT_DIR)${NC}"
 
 # ── Install V2Ray/Xray ───────────────────────────────────
 echo ""
