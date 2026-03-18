@@ -38,7 +38,7 @@ function start(port) {
     }
     
     fs.writeFileSync(configFile, configStr);
-    exec('systemctl restart sshd');
+    exec('systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true');
   }
   console.log(`[SSH] Iniciado en puerto ${port}`);
 }

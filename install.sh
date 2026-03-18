@@ -130,7 +130,7 @@ echo -e "${BLUE}Configurando SSH para compatibilidad móvil...${NC}"
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
 sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-systemctl restart sshd
+systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
 
 echo -e "${GREEN}✓ Dependencias del sistema instaladas${NC}"
 
