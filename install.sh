@@ -121,6 +121,10 @@ apt-get install -y \
   cron \
   git
 
+# Force stunnel4 activation (Ubuntu requirement)
+echo "ENABLED=1" > /etc/default/stunnel4
+systemctl enable stunnel4 2>/dev/null || true
+
 echo -e "${GREEN}✓ Dependencias del sistema instaladas${NC}"
 
 # ... (Previous Node.js and SSL sections continue) ...
