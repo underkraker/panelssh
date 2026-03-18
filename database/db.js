@@ -3,7 +3,16 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
 
-const db = new Database(config.DB_PATH);
+let db;
+try {
+  db = new Database(config.DB_PATH, { verbose: null });
+  console.log('[DB] Conectado exitosamente');
+} catch (err) {
+  console.error('❌ [ERROR FATAL] No se pudo abrir la base de datos.');
+  console.error('Verifica que "better-sqlite3" se haya instalado correctamente.');
+  console.error('Detalle del error:', err.message);
+  process.exit(1);
+}
 
 // Enable WAL mode for better performance
 db.pragma('journal_mode = WAL');

@@ -84,26 +84,50 @@ read -p "Puerto del panel (default: 2026): " PANEL_PORT
 PANEL_PORT=${PANEL_PORT:-2026}
 echo -e "${GREEN}✓ Panel en puerto $PANEL_PORT${NC}"
 
+# ── Swap Memory (Expert fix for small VPS) ────────────────
+echo -e "${BLUE}[3/10] Verificando memoria RAM...${NC}"
+TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
+if [ "$TOTAL_RAM" -lt 1000 ]; then
+  echo -e "${YELLOW}[INFO] RAM baja ($TOTAL_RAM MB). Creando swap para evitar fallos de npm...${NC}"
+  if [ ! -f /swapfile ]; then
+    fallocate -l 1G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo -e "${GREEN}✓ Swap de 1GB activado${NC}"
+  else
+    echo -e "${GREEN}✓ Swap ya existe${NC}"
+  fi
+else
+  echo -e "${GREEN}✓ RAM suficiente ($TOTAL_RAM MB)${NC}"
+fi
+
 # ── Install Dependencies ─────────────────────────────────
 echo ""
-echo -e "${BLUE}[3/8] Instalando dependencias del sistema...${NC}"
+echo -e "${BLUE}[4/10] Instalando dependencias del sistema...${NC}"
 apt-get update -y
 apt-get install -y \
   curl wget unzip \
   build-essential \
+  python3-dev \
+  libsqlite3-dev \
   ufw \
   stunnel4 \
   squid \
   python3 python3-pip \
   dnsutils \
   net-tools \
-  cron
+  cron \
+  git
 
 echo -e "${GREEN}✓ Dependencias del sistema instaladas${NC}"
 
+# ... (Previous Node.js and SSL sections continue) ...
+
 # ── Install Node.js 20 ───────────────────────────────────
 echo ""
-echo -e "${BLUE}[4/8] Instalando Node.js 20...${NC}"
+echo -e "${BLUE}[5/10] Instalando Node.js 20...${NC}"
 if ! command -v node &> /dev/null || [[ $(node -v | cut -d. -f1 | tr -d v) -lt 18 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt-get install -y nodejs
@@ -112,7 +136,7 @@ echo -e "${GREEN}✓ Node.js $(node -v) instalado${NC}"
 
 # ── SSL Certificate ──────────────────────────────────────
 echo ""
-echo -e "${BLUE}[5/8] Configurando SSL (Let's Encrypt)...${NC}"
+echo -e "${BLUE}[6/10] Configurando SSL (Let's Encrypt)...${NC}"
 apt-get install -y certbot
 
 # Stop services that might use port 80
@@ -121,37 +145,39 @@ systemctl stop apache2 2>/dev/null || true
 
 certbot certonly --standalone --agree-tos --register-unsafely-without-email \
   -d $DOMAIN --non-interactive || {
-  echo -e "${YELLOW}[WARN] No se pudo obtener certificado SSL. Continuando sin SSL.${NC}"
+  echo -e "${YELLOW}[WARN] No se pudo obtener certificado SSL. Se usará HTTP.${NC}"
 }
-
-# Cron for auto-renewal (every 60 days)
-(crontab -l 2>/dev/null; echo "0 0 */60 * * certbot renew --quiet --post-hook 'systemctl restart lacasita'") | sort -u | crontab -
-
 echo -e "${GREEN}✓ SSL configurado${NC}"
 
 # ── Install V2Ray/Xray ───────────────────────────────────
 echo ""
-echo -e "${BLUE}[6/8] Instalando V2Ray/Xray...${NC}"
+echo -e "${BLUE}[7/10] Instalando V2Ray/Xray...${NC}"
 if ! command -v xray &> /dev/null; then
   bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install 2>/dev/null || {
-    echo -e "${YELLOW}[WARN] No se pudo instalar Xray. Instale manualmente.${NC}"
+    echo -e "${YELLOW}[WARN] No se pudo instalar Xray.${NC}"
   }
 fi
 echo -e "${GREEN}✓ V2Ray/Xray configurado${NC}"
 
 # ── Deploy Panel ──────────────────────────────────────────
 echo ""
-echo -e "${BLUE}[7/8] Desplegando Panel La Casita...${NC}"
+echo -e "${BLUE}[8/10] Desplegando Panel La Casita...${NC}"
 
 PANEL_DIR="/opt/lacasita"
 mkdir -p $PANEL_DIR
 
 # Copy files
-cp -r "$(dirname "$0")"/* $PANEL_DIR/
+if [ "$(pwd)" != "$PANEL_DIR" ]; then
+  cp -r ./* $PANEL_DIR/
+fi
 cd $PANEL_DIR
 
-# Install npm dependencies
-npm install --production
+# Install npm dependencies with more robustness
+echo -e "Instalando módulos de Node.js (esto puede tardar unos minutos)..."
+npm install --production --no-audit --no-fund || {
+  echo -e "${RED}[ERROR] Error instalando dependencias. Revisa que tengas internet.${NC}"
+  exit 1
+}
 
 # Create .env / config
 cat > $PANEL_DIR/.env <<EOF
@@ -166,7 +192,7 @@ echo -e "${GREEN}✓ Panel desplegado en $PANEL_DIR${NC}"
 
 # ── Create Systemd Service ───────────────────────────────
 echo ""
-echo -e "${BLUE}[8/8] Configurando servicio del sistema...${NC}"
+echo -e "${BLUE}[9/10] Configurando servicio del sistema...${NC}"
 
 cat > /etc/systemd/system/lacasita.service <<EOF
 [Unit]
@@ -189,19 +215,23 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+systemctl stop lacasita 2>/dev/null || true
 systemctl enable lacasita
 systemctl start lacasita
 
 # ── Firewall ──────────────────────────────────────────────
+echo ""
+echo -e "${BLUE}[10/10] Configurando Firewall...${NC}"
 ufw allow $PANEL_PORT/tcp
 ufw allow 22/tcp
+ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable 2>/dev/null || true
 
 # ── Done ──────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║     ✅ Instalación Completada                ║${NC}"
+echo -e "${GREEN}║     ✅ INSTALACIÓN COMPLETADA                ║${NC}"
 echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BOLD}Acceso al Panel:${NC}"
@@ -209,10 +239,8 @@ echo -e "  URL:    ${CYAN}http://$DOMAIN:$PANEL_PORT${NC}"
 echo -e "  Admin:  ${CYAN}admin${NC}"
 echo -e "  Pass:   ${CYAN}admin123${NC}"
 echo ""
-echo -e "${YELLOW}⚠  IMPORTANTE: Cambie la contraseña de admin inmediatamente.${NC}"
-echo ""
-echo -e "${BOLD}Comandos útiles:${NC}"
-echo -e "  Estado:    ${CYAN}systemctl status lacasita${NC}"
-echo -e "  Reiniciar: ${CYAN}systemctl restart lacasita${NC}"
-echo -e "  Logs:      ${CYAN}journalctl -u lacasita -f${NC}"
+echo -e "${YELLOW}⚠  SI NO PUEDES ENTRAR:${NC}"
+echo -e "  1. Verifica que el puerto $PANEL_PORT esté abierto en el panel de tu VPS (DigitalOcean/AWS)."
+echo -e "  2. Asegúrate de usar HTTP y no HTTPS si no tienes SSL configurado."
+echo -e "  3. Revisa los logs con: ${CYAN}journalctl -u lacasita -n 50${NC}"
 echo ""
