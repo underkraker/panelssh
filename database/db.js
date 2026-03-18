@@ -1,15 +1,15 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
 
 let db;
 try {
+  const Database = require('better-sqlite3');
   db = new Database(config.DB_PATH, { verbose: null });
   console.log('[DB] Conectado exitosamente');
 } catch (err) {
-  console.error('❌ [ERROR FATAL] No se pudo abrir la base de datos.');
-  console.error('Verifica que "better-sqlite3" se haya instalado correctamente.');
+  console.error('❌ [ERROR FATAL] No se pudo cargar el motor de Base de Datos.');
+  console.error('Este error es común si no se instaló "build-essential" o si "npm install" falló.');
   console.error('Detalle del error:', err.message);
   process.exit(1);
 }

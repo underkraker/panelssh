@@ -228,7 +228,28 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 ufw --force enable 2>/dev/null || true
 
-# ── Done ──────────────────────────────────────────────────
+# ── Done & Diagnostic ─────────────────────────────────────
+echo ""
+echo -e "${BLUE}[10/10] Verificando instalación...${NC}"
+sleep 5
+
+if netstat -tuln | grep -q ":$PANEL_PORT "; then
+  echo -e "${GREEN}✓ El panel está escuchando en el puerto $PANEL_PORT${NC}"
+  
+  # Try local curl test
+  if command -v curl &> /dev/null; then
+    LOCAL_TEST=$(curl -s -I http://localhost:$PANEL_PORT | head -n 1)
+    if [[ "$LOCAL_TEST" == *"200"* ]] || [[ "$LOCAL_TEST" == *"302"* ]]; then
+      echo -e "${GREEN}✓ Prueba local exitosa (Respuesta: $LOCAL_TEST)${NC}"
+    else
+      echo -e "${YELLOW}[WARN] El panel respondió de forma inusual localmente: $LOCAL_TEST${NC}"
+    fi
+  fi
+else
+  echo -e "${RED}[ERROR] El panel NO está escuchando en el puerto $PANEL_PORT.${NC}"
+  echo -e "Revisa los errores con: journalctl -u lacasita -n 50"
+fi
+
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║     ✅ INSTALACIÓN COMPLETADA                ║${NC}"
@@ -239,8 +260,8 @@ echo -e "  URL:    ${CYAN}http://$DOMAIN:$PANEL_PORT${NC}"
 echo -e "  Admin:  ${CYAN}admin${NC}"
 echo -e "  Pass:   ${CYAN}admin123${NC}"
 echo ""
-echo -e "${YELLOW}⚠  SI NO PUEDES ENTRAR:${NC}"
-echo -e "  1. Verifica que el puerto $PANEL_PORT esté abierto en el panel de tu VPS (DigitalOcean/AWS)."
-echo -e "  2. Asegúrate de usar HTTP y no HTTPS si no tienes SSL configurado."
-echo -e "  3. Revisa los logs con: ${CYAN}journalctl -u lacasita -n 50${NC}"
+echo -e "${YELLOW}⚠  SI NO PUEDES ENTRAR (DADO QUE EL PANEL YA ESTÁ CORRIENDO):${NC}"
+echo -e "  1. Es un problema de FIREWALL EXTERNO de tu proveedor (DigitalOcean/AWS/Google Cloud)."
+echo -e "  2. Debes abrir el puerto $PANEL_PORT en el panel web de tu proveedor."
+echo -e "  3. Prueba acceder por IP: http://$(curl -s ifconfig.me):$PANEL_PORT"
 echo ""

@@ -1,11 +1,24 @@
+// ── Global Error Handling (Expert Troubleshooting) ──────────
+process.on('uncaughtException', (err) => {
+  console.error('❌ [CRASH] Uncaught Exception:', err.message);
+  console.error(err.stack);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ [CRASH] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const cron = require('node-cron');
+const fs = require('fs');
 
 const config = require('./config');
+// Import DB with error handling already inside its module
 const db = require('./database/db');
 const portMonitor = require('./services/port-monitor');
 const cleanupExpired = require('./cron/cleanup-expired');
