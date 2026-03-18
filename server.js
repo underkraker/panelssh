@@ -127,6 +127,32 @@ server.listen(PORT, '0.0.0.0', () => {
   
   // Start port monitor
   portMonitor.startMonitor(config.PORT_MONITOR_INTERVAL);
+
+  // Auto-start enabled services
+  try {
+    const services = db.prepare('SELECT * FROM service_ports WHERE enabled = 1').all();
+    const serviceModules = {
+      ssh: require('./services/ssh'),
+      stunnel: require('./services/stunnel'),
+      squid: require('./services/squid'),
+      v2ray: require('./services/v2ray'),
+      websocket: require('./services/websocket')
+    };
+
+    services.forEach(svc => {
+      const mod = serviceModules[svc.name];
+      if (mod) {
+        console.log(`[AutoStart] Iniciando ${svc.name} en puerto ${svc.port}...`);
+        try {
+          mod.start(svc.port);
+        } catch (e) {
+          console.error(`[AutoStart] Error al iniciar ${svc.name}:`, e.message);
+        }
+      }
+    });
+  } catch (err) {
+    console.error('[AutoStart] Error al cargar servicios:', err.message);
+  }
 });
 
 // Graceful shutdown

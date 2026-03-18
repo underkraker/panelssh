@@ -228,6 +228,7 @@ ufw allow $PANEL_PORT/tcp
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
+ufw allow 8880/tcp
 ufw --force enable 2>/dev/null || true
 
 # ── Done & Diagnostic ─────────────────────────────────────
