@@ -178,7 +178,11 @@ router.post('/', requireAuth, (req, res) => {
     const encryptedPassword = credentials.encrypt(password);
 
     // Create system user
-    systemUsers.createSystemUser(username, password, expiry_date);
+    try {
+      systemUsers.createSystemUser(username, password, expiry_date);
+    } catch (sysErr) {
+      return res.status(500).json({ error: sysErr.message });
+    }
     
     // Insert in database
     const result = db.prepare(

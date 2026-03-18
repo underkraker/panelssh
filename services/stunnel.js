@@ -38,9 +38,21 @@ connect = 127.0.0.1:${sshPort}
 
 function start(port) {
   if (isRoot) {
+    // Verify certificates exist
+    if (!fs.existsSync(config.SSL_CERT) || !fs.existsSync(config.SSL_KEY)) {
+      console.error(`[Stunnel] Error: Certificados no encontrados en ${config.SSL_CERT} o ${config.SSL_KEY}`);
+      console.warn('[Stunnel] Por favor, genere los certificados SSL antes de activar este servicio.');
+      return;
+    }
+
     const configContent = generateConfig(port);
     fs.writeFileSync('/etc/stunnel/stunnel.conf', configContent);
-    exec('systemctl restart stunnel4');
+    
+    try {
+      exec('systemctl restart stunnel4');
+    } catch (err) {
+      console.error('[Stunnel] Falló el reinicio de stunnel4:', err.message);
+    }
   }
   console.log(`[Stunnel] Iniciado SSL en puerto ${port}`);
 }

@@ -1,4 +1,5 @@
 const { spawnSync } = require('child_process');
+const fs = require('fs');
 
 const isRoot = process.getuid && process.getuid() === 0;
 
@@ -47,11 +48,29 @@ function createSystemUser(username, password, expiryDate) {
     throw new Error('Fecha de expiración inválida. Use formato YYYY-MM-DD.');
   }
 
-  // Create Linux user with shell /bin/false for SSH tunnel only
-  // ignoreError=true in case user already exists in system
-  run('useradd', ['-M', '-s', '/bin/false', '-e', expiryDate, username], { ignoreError: true });
-  setPassword(username, password);
-  console.log(`[System] Usuario creado: ${username}, expira: ${expiryDate}`);
+  // Determine shell (prefer nologin for security)
+  let shell = '/bin/false';
+  if (fs.existsSync('/usr/sbin/nologin')) shell = '/usr/sbin/nologin';
+  else if (fs.existsSync('/usr/bin/nologin')) shell = '/usr/bin/nologin';
+
+  console.log(`[System] Creando usuario ${username} con shell ${shell}...`);
+  
+  // Create Linux user with shell for SSH tunnel only
+  try {
+    // Check if user already exists in system to avoid confusing errors
+    const checkUser = spawnSync('id', [username]);
+    if (checkUser.status === 0) {
+      console.warn(`[System] El usuario ${username} ya existe en el sistema. Intentando actualizar contraseña...`);
+    } else {
+      run('useradd', ['-M', '-s', shell, '-e', expiryDate, username]);
+    }
+    
+    setPassword(username, password);
+    console.log(`[System] Usuario creado/actualizado: ${username}, expira: ${expiryDate}`);
+  } catch (err) {
+    console.error(`[System] Error al crear usuario ${username}:`, err.message);
+    throw new Error(`Error de sistema al crear usuario: ${err.message}`);
+  }
 }
 
 function deleteSystemUser(username) {

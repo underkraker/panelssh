@@ -88,9 +88,16 @@ function isRunning() {
     const xray = execSync('systemctl is-active xray 2>/dev/null', { encoding: 'utf8' });
     if (xray.trim() === 'active') return true;
   } catch (e) {}
+  
   try {
     const v2ray = execSync('systemctl is-active v2ray 2>/dev/null', { encoding: 'utf8' });
-    return v2ray.trim() === 'active';
+    if (v2ray.trim() === 'active') return true;
+  } catch (e) {}
+
+  // Fallback: pgrep
+  try {
+    const pgrep = execSync('pgrep xray || pgrep v2ray', { encoding: 'utf8' });
+    return pgrep.trim().length > 0;
   } catch (e) {
     return false;
   }

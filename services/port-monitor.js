@@ -10,21 +10,29 @@ function getPortStatus() {
   const status = {};
   
   try {
-    const ssOutput = execSync('ss -tulnp 2>/dev/null || netstat -tulnp 2>/dev/null', { 
-      encoding: 'utf8', timeout: 5000 
-    });
+    // Use ss -tuln for fast port check, netstat as fallback
+    let ssOutput = '';
+    try {
+      ssOutput = execSync('ss -tuln', { encoding: 'utf8', timeout: 3000 });
+    } catch (e) {
+      ssOutput = execSync('netstat -tuln', { encoding: 'utf8', timeout: 3000 });
+    }
     
     for (const svc of services) {
-      const portRegex = new RegExp(`:${svc.port}\\b`);
+      // Check for port in output. Matches ":PORT " or ":PORT\n"
+      // Handle both IPv4 (0.0.0.0:PORT) and IPv6 ([::]:PORT) formatted by ss/netstat
+      const portRegex = new RegExp(`[:\\]]${svc.port}\\s`, 'm');
+      const listening = portRegex.test(ssOutput);
+      
       status[svc.name] = {
         name: svc.name,
         port: svc.port,
         enabled: !!svc.enabled,
-        listening: portRegex.test(ssOutput)
+        listening: listening
       };
     }
   } catch (e) {
-    // If ss/netstat fails, mark all as unknown
+    console.error('[Monitor] Error checking ports:', e.message);
     for (const svc of services) {
       status[svc.name] = {
         name: svc.name,

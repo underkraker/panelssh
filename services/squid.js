@@ -61,7 +61,11 @@ request_header_access Connection allow all
 request_header_access Proxy-Connection allow all
 request_header_access User-Agent allow all
 request_header_access Cookie allow all
-request_header_access All deny all
+request_header_access Upgrade allow all
+request_header_access X-Forwarded-For allow all
+request_header_access X-Forwarded-Proto allow all
+request_header_access X-Requested-With allow all
+request_header_access All allow all
 
 http_access allow all
 forwarded_for delete

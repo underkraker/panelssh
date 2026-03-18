@@ -50,10 +50,17 @@ function stop() {
 function isRunning() {
   if (!isRoot) return false;
   try {
-    const result = execSync('pgrep -f badvpn-udpgw 2>/dev/null', { encoding: 'utf8' });
+    // Check for badvpn-udpgw specifically
+    const result = execSync('pgrep -f badvpn-udpgw', { encoding: 'utf8' });
     return result.trim().length > 0;
   } catch (e) {
-    return false;
+    // Fallback: check if any process matches
+    try {
+      const ps = execSync('ps aux | grep -v grep | grep badvpn-udpgw', { encoding: 'utf8' });
+      return ps.trim().length > 0;
+    } catch (e2) {
+      return false;
+    }
   }
 }
 

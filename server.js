@@ -73,11 +73,21 @@ function startServiceWatchdog() {
 
         if (!running) {
           const targetPort = svc.name === 'ssh' ? 22 : svc.port;
-          console.warn(`[Watchdog] ${svc.name} caído, reiniciando en puerto ${targetPort}...`);
+          
+          // Check for port conflict before restarting
+          try {
+            const conflict = db.prepare('SELECT name FROM service_ports WHERE port = ? AND name != ? AND enabled = 1').get(targetPort, svc.name);
+            if (conflict) {
+              console.error(`[Watchdog] ❌ Conflicto de puerto detected: ${svc.name} no puede iniciar en ${targetPort} porque ${conflict.name} lo está usando.`);
+              continue;
+            }
+          } catch (e) {}
+
+          console.warn(`[Watchdog] ⚠️ ${svc.name} caído, reiniciando en puerto ${targetPort}...`);
           try {
             mod.start(targetPort);
           } catch (restartErr) {
-            console.error(`[Watchdog] Error al reiniciar ${svc.name}:`, restartErr.message);
+            console.error(`[Watchdog] ❌ Error al reiniciar ${svc.name}:`, restartErr.message);
           }
         }
       }
@@ -257,6 +267,26 @@ server.listen(PORT, '0.0.0.0', () => {
   
   // Start port monitor
   portMonitor.startMonitor(config.PORT_MONITOR_INTERVAL);
+
+  const isRoot = process.getuid && process.getuid() === 0;
+  if (!isRoot) {
+    console.warn('');
+    console.warn('⚠️  [ADVERTENCIA] El panel NO se está ejecutando como ROOT.');
+    console.warn('   Muchos servicios (SSH, SSL, Squid) fallarán al intentar iniciarse o monitorearse.');
+    console.warn('   Se recomienda ejecutar con: sudo node server.js');
+    console.warn('');
+  }
+
+  // Check system requirements
+  const checkCmd = (cmd) => {
+    try { require('child_process').execSync(`command -v ${cmd} >/dev/null 2>&1`); return true; }
+    catch (e) { return false; }
+  };
+  
+  const requirements = ['ss', 'netstat', 'pgrep'];
+  requirements.forEach(req => {
+    if (!checkCmd(req)) console.warn(`⚠️  [SISTEMA] Falta comando esencial: ${req}. El monitoreo puede fallar.`);
+  });
 
   // Auto-start enabled services
   try {

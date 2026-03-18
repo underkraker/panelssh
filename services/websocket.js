@@ -16,59 +16,74 @@ const pythonScript = `
 import socket
 import threading
 import sys
+import os
 
-def handle_client(client_socket, remote_host, remote_port):
+# WebSocket Tunnel v2026 - Optimized for Stability
+REMOTE_HOST = '127.0.0.1'
+REMOTE_PORT = 22
+BUFFER_SIZE = 8192
+
+def pipe(src, dst):
     try:
+        while True:
+            data = src.recv(BUFFER_SIZE)
+            if not data:
+                break
+            dst.sendall(data)
+    except:
+        pass
+    finally:
+        try: src.close()
+        except: pass
+        try: dst.close()
+        except: pass
+
+def handle_client(client_socket):
+    try:
+        # Establish connection to local SSH
         remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        remote_socket.connect((remote_host, remote_port))
+        remote_socket.connect((REMOTE_HOST, REMOTE_PORT))
         
-        def forward(src, dst):
-            try:
-                while True:
-                    data = src.recv(4096)
-                    if not data:
-                        break
-                    dst.sendall(data)
-            except:
-                pass
-            finally:
-                src.close()
-                dst.close()
-        
-        t1 = threading.Thread(target=forward, args=(client_socket, remote_socket))
-        t2 = threading.Thread(target=forward, args=(remote_socket, client_socket))
-        t1.daemon = True
-        t2.daemon = True
-        t1.start()
-        t2.start()
+        # Bi-directional pipe
+        threading.Thread(target=pipe, args=(client_socket, remote_socket), daemon=True).start()
+        threading.Thread(target=pipe, args=(remote_socket, client_socket), daemon=True).start()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error connecting to SSH: {e}")
         client_socket.close()
 
 def start_server(port):
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(('0.0.0.0', port))
-    server.listen(100)
-    print(f"WebSocket tunnel listening on port {port}")
+    try:
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(('0.0.0.0', port))
+        server.listen(500)
+        print(f"WebSocket tunnel active on port {port}")
+    except Exception as e:
+        print(f"Failed to start server: {e}")
+        sys.exit(1)
     
     while True:
-        client, addr = server.accept()
-        # Read initial HTTP header
-        data = client.recv(4096).decode('utf-8', errors='ignore')
-        if 'HTTP/' in data:
-            response = "HTTP/1.1 101 Switching Protocols\\r\\n"
-            response += "Upgrade: websocket\\r\\n"
-            response += "Connection: Upgrade\\r\\n\\r\\n"
-            client.sendall(response.encode())
-        
-        handler = threading.Thread(target=handle_client, args=(client, '127.0.0.1', 22))
-        handler.daemon = True
-        handler.start()
+        try:
+            client, addr = server.accept()
+            # Initial handshake for WebSocket bypass
+            data = client.recv(BUFFER_SIZE).decode('utf-8', errors='ignore')
+            if 'HTTP/' in data and 'Upgrade: websocket' in data:
+                response = "HTTP/1.1 101 Switching Protocols\\r\\n"
+                response += "Upgrade: websocket\\r\\n"
+                response += "Connection: Upgrade\\r\\n\\r\\n"
+                client.sendall(response.encode())
+            
+            handle_client(client)
+        except Exception as e:
+            print(f"Client handling error: {e}")
 
 if __name__ == '__main__':
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8880
-    start_server(port)
+    # Run as a daemon-like process
+    try:
+        start_server(port)
+    except KeyboardInterrupt:
+        sys.exit(0)
 `;
 
 function start(port) {
@@ -79,14 +94,25 @@ function start(port) {
     // Kill existing
     try { exec('pkill -f ws-tunnel.py'); } catch (e) {}
     
-    // Launch in background
-    wsProcess = spawn('python3', [scriptPath, port.toString()], {
+    // Launch in background with shell to ensure proper detachment
+    const pythonCmd = commandExists('python3') ? 'python3' : 'python';
+    const child = spawn(pythonCmd, [scriptPath, port.toString()], {
       detached: true,
       stdio: 'ignore'
     });
-    wsProcess.unref();
+    child.unref();
+    wsProcess = child;
   }
   console.log(`[WebSocket] Iniciado en puerto ${port}`);
+}
+
+function commandExists(cmd) {
+  try {
+    execSync(`command -v ${cmd}`);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function stop() {

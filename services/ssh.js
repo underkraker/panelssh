@@ -50,10 +50,21 @@ function stop() {
 
 function isRunning() {
   try {
+    // Check systemd first
     const result = execSync('systemctl is-active sshd 2>/dev/null || systemctl is-active ssh 2>/dev/null', { encoding: 'utf8' });
-    return result.trim() === 'active';
+    if (result.trim() === 'active') return true;
+
+    // Fallback: Check if port 22 is listening (common for SSH)
+    const portCheck = execSync('ss -tuln | grep -q ":22 " && echo "active" || echo "inactive"', { encoding: 'utf8' });
+    return portCheck.trim() === 'active';
   } catch (e) {
-    return false;
+    // Last resort fallback
+    try {
+      const pgrep = execSync('pgrep sshd', { encoding: 'utf8' });
+      return pgrep.trim().length > 0;
+    } catch (e2) {
+      return false;
+    }
   }
 }
 
