@@ -1,9 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const db = require('../database/db');
 
-function createBackup() {
-  const dbPath = path.join(__dirname, '../database/lacasita.db');
+async function createBackup() {
   const backupDir = path.join(__dirname, '../backups');
   
   if (!fs.existsSync(backupDir)) {
@@ -15,10 +14,13 @@ function createBackup() {
   const backupPath = path.join(backupDir, backupFileName);
   
   try {
-    // For SQLite, a simple file copy is usually fine if not writing, 
-    // but sqlite3 .backup is safer. Since we use better-sqlite3, we can just copy
-    // OR use the .backup command if the CLI is installed.
-    fs.copyFileSync(dbPath, backupPath);
+    // Consistent SQLite backup with better-sqlite3 API.
+    if (typeof db.backup === 'function') {
+      await db.backup(backupPath);
+    } else {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      fs.copyFileSync(path.join(__dirname, '../database/lacasita.db'), backupPath);
+    }
     
     // Keep only last 5 backups
     const files = fs.readdirSync(backupDir)

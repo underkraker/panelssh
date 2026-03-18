@@ -68,7 +68,7 @@ const DemosModule = {
         <td><span class="demo-timer" data-expires="${d.expires_at}">${this.formatTimer(minutesLeft)}</span></td>
         <td>${Utils.formatDateTime(d.created_at)}</td>
         <td>
-          <button class="btn-icon danger" title="Eliminar" onclick="DemosModule.deleteDemo(${d.id}, '${Utils.escapeHtml(d.username)}')">
+          <button class="btn-icon danger" title="Eliminar" onclick="DemosModule.deleteDemo(${d.id}, '${Utils.escapeJsString(d.username)}')">
             <i class="fas fa-trash"></i>
           </button>
         </td>

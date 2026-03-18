@@ -75,8 +75,8 @@ const UsersModule = {
             <button class="btn-icon" title="${u.status === 'banned' ? 'Desbanear' : 'Banear'}" onclick="UsersModule.toggleBan(${u.id})">
               <i class="fas fa-${u.status === 'banned' ? 'unlock' : 'ban'}"></i>
             </button>
-            <button class="btn-icon" title="Reset Pass" onclick="UsersModule.resetPassword(${u.id}, '${Utils.escapeHtml(u.username)}')"><i class="fas fa-key"></i></button>
-            <button class="btn-icon danger" title="Eliminar" onclick="UsersModule.deleteUser(${u.id}, '${Utils.escapeHtml(u.username)}')"><i class="fas fa-trash"></i></button>
+            <button class="btn-icon" title="Reset Pass" onclick="UsersModule.resetPassword(${u.id}, '${Utils.escapeJsString(u.username)}')"><i class="fas fa-key"></i></button>
+            <button class="btn-icon danger" title="Eliminar" onclick="UsersModule.deleteUser(${u.id}, '${Utils.escapeJsString(u.username)}')"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       </tr>
@@ -229,24 +229,18 @@ const UsersModule = {
 
   async showTicket(id) {
     try {
-      const [usersData, servicesData] = await Promise.all([
-        API.get('/api/users'),
-        API.get('/api/services/status')
-      ]);
-      
-      const user = usersData.users.find(u => u.id === id);
-      if (!user) return Toast.error('Usuario no encontrado');
-      
-      const services = servicesData.services || [];
+      const data = await API.get(`/api/users/${id}/ticket`);
+      const ticket = data.ticket;
+      const services = ticket.services || [];
       const getPort = (name) => services.find(s => s.name === name)?.port || '—';
-      const domain = window.location.hostname;
+      const domain = ticket.domain || window.location.hostname;
       
       const ticketText = `╔══════════════════════════════════════════╗
 ║     🏠 Tu Acceso - La Casita Panel       ║
 ╚══════════════════════════════════════════╝
-👤 Usuario: ${user.username}
-🔑 Pass: ${user.password}
-📅 Expira: ${Utils.formatDate(user.expiry_date)}
+👤 Usuario: ${ticket.username}
+🔑 Pass: ${ticket.password}
+📅 Expira: ${Utils.formatDate(ticket.expiry_date)}
 🌐 Host: ${domain}
 
 🚀 SERVICIOS ACTIVOS:
@@ -257,7 +251,7 @@ const UsersModule = {
 - BadVPN (UDP): ${getPort('badvpn')}
 
 🔗 PAYLOAD WS:
-GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`;
+${ticket.payload || `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`}`;
 
       Modal.show('Ticket de Usuario', `
         <div class="ticket-container">

@@ -43,9 +43,9 @@ const ResellersModule = {
                     <td>${Utils.formatDate(r.created_at)}</td>
                     <td>
                       <div style="display:flex;gap:4px">
-                        <button class="btn-icon" title="Editar créditos" onclick="ResellersModule.editCredits(${r.id}, '${Utils.escapeHtml(r.username)}', ${r.credits})"><i class="fas fa-coins"></i></button>
+                        <button class="btn-icon" title="Editar créditos" onclick="ResellersModule.editCredits(${r.id}, '${Utils.escapeJsString(r.username)}', ${r.credits})"><i class="fas fa-coins"></i></button>
                         <button class="btn-icon" title="Editar" onclick="ResellersModule.showEditModal(${r.id})"><i class="fas fa-pen"></i></button>
-                        <button class="btn-icon danger" title="Eliminar" onclick="ResellersModule.deleteReseller(${r.id}, '${Utils.escapeHtml(r.username)}')"><i class="fas fa-trash"></i></button>
+                        <button class="btn-icon danger" title="Eliminar" onclick="ResellersModule.deleteReseller(${r.id}, '${Utils.escapeJsString(r.username)}')"><i class="fas fa-trash"></i></button>
                       </div>
                     </td>
                   </tr>

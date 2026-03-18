@@ -15,7 +15,6 @@ const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const cron = require('node-cron');
-const fs = require('fs');
 
 const config = require('./config');
 // Import DB with error handling already inside its module
@@ -27,21 +26,55 @@ const cleanupDemos = require('./cron/cleanup-demos');
 // ── Express App ──────────────────────────────────────────────
 const app = express();
 const server = http.createServer(app);
+const isProduction = process.env.NODE_ENV === 'production';
+
+app.disable('x-powered-by');
+if (isProduction) {
+  app.set('trust proxy', 1);
+}
 
 // Body parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Sessions
-app.use(session({
+const sessionMiddleware = session({
   secret: config.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { 
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    httpOnly: true
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProduction
   }
-}));
+});
+
+app.use(sessionMiddleware);
+
+// Basic CSRF mitigation for browser requests using cookies
+app.use((req, res, next) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return next();
+  }
+
+  const host = req.get('host');
+  const origin = req.get('origin');
+  const referer = req.get('referer');
+
+  try {
+    if (origin && new URL(origin).host !== host) {
+      return res.status(403).json({ error: 'Origen no permitido.' });
+    }
+    if (!origin && referer && new URL(referer).host !== host) {
+      return res.status(403).json({ error: 'Origen no permitido.' });
+    }
+  } catch (err) {
+    return res.status(403).json({ error: 'Encabezado de origen inválido.' });
+  }
+
+  next();
+});
 
 // Static files
 app.use(express.static(path.join(__dirname, 'public')));
@@ -80,11 +113,12 @@ app.get('/api/dashboard', (req, res) => {
       recentLogs: db.prepare('SELECT l.*, a.username as admin_name FROM logs l LEFT JOIN admins a ON l.admin_id = a.id ORDER BY l.created_at DESC LIMIT 10').all()
     };
   } else {
+    const reseller = db.prepare('SELECT credits FROM admins WHERE id = ?').get(user.id);
     stats = {
       totalUsers: db.prepare('SELECT COUNT(*) as c FROM users WHERE created_by = ?').get(user.id).c,
       activeUsers: db.prepare("SELECT COUNT(*) as c FROM users WHERE created_by = ? AND status = 'active'").get(user.id).c,
       expiredUsers: db.prepare("SELECT COUNT(*) as c FROM users WHERE created_by = ? AND status = 'expired'").get(user.id).c,
-      credits: db.prepare('SELECT credits FROM admins WHERE id = ?').get(user.id).credits,
+      credits: reseller ? reseller.credits : 0,
       activeDemos: 0,
       totalResellers: 0,
       activeServices: 0,
@@ -101,10 +135,37 @@ app.get('*', (req, res) => {
 });
 
 // ── WebSocket Server (Port Monitor) ─────────────────────────
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+  if (!request.url || !request.url.startsWith('/ws')) {
+    socket.destroy();
+    return;
+  }
+
+  const fakeRes = {
+    statusCode: 200,
+    getHeader: () => undefined,
+    setHeader: () => {},
+    writeHead: () => {},
+    end: () => {}
+  };
+
+  sessionMiddleware(request, fakeRes, () => {
+    if (!request.session || !request.session.user) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  });
+});
 
 wss.on('connection', (ws, req) => {
-  console.log('[WS] Cliente conectado');
+  console.log(`[WS] Cliente conectado: ${req.session.user.username}`);
   portMonitor.addClient(ws);
 });
 

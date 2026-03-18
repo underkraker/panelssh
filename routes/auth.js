@@ -29,26 +29,31 @@ router.post('/login', bruteForceProtection, (req, res) => {
     return res.status(401).json({ error: msg, locked });
   }
   
-  // Success — reset attempts and create session
+  // Success — reset attempts and create fresh session
   resetAttempts(ip);
-  
-  req.session.user = {
-    id: admin.id,
-    username: admin.username,
-    role: admin.role
-  };
-  
-  // Log success
-  db.prepare('INSERT INTO logs (admin_id, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?)')
-    .run(admin.id, 'login_success', admin.username, 'Inicio de sesión exitoso', ip);
-  
-  res.json({ 
-    success: true, 
-    user: { 
-      id: admin.id, 
-      username: admin.username, 
-      role: admin.role 
-    } 
+  req.session.regenerate((regenErr) => {
+    if (regenErr) {
+      return res.status(500).json({ error: 'No se pudo iniciar sesión. Intente nuevamente.' });
+    }
+
+    req.session.user = {
+      id: admin.id,
+      username: admin.username,
+      role: admin.role
+    };
+
+    // Log success
+    db.prepare('INSERT INTO logs (admin_id, action, target, details, ip_address) VALUES (?, ?, ?, ?, ?)')
+      .run(admin.id, 'login_success', admin.username, 'Inicio de sesión exitoso', ip);
+
+    res.json({
+      success: true,
+      user: {
+        id: admin.id,
+        username: admin.username,
+        role: admin.role
+      }
+    });
   });
 });
 

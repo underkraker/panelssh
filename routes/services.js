@@ -74,9 +74,9 @@ router.post('/:name/toggle', requireAuth, requireAdmin, (req, res) => {
 // PUT /api/services/:name/port — change service port
 router.put('/:name/port', requireAuth, requireAdmin, (req, res) => {
   const { name } = req.params;
-  const { port } = req.body;
+  const port = parseInt(req.body.port, 10);
   
-  if (!port || port < 1 || port > 65535) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
     return res.status(400).json({ error: 'Puerto inválido.' });
   }
   

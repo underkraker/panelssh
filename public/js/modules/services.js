@@ -58,10 +58,10 @@ const ServicesModule = {
     const icon = this.serviceIcons[s.name] || 'fa-circle';
     const name = this.serviceNames[s.name] || s.name;
     const desc = this.serviceDescriptions[s.name] || '';
-    const running = s.running || s.enabled;
+    const running = !!s.running;
 
     return `
-      <div class="service-card ${running ? 'running' : 'stopped'}">
+      <div class="service-card ${running ? 'running' : 'stopped'}" data-service="${s.name}">
         <div class="service-card-header">
           <div class="service-name">
             <i class="fas ${icon}" style="color:${running ? 'var(--green)' : 'var(--text-muted)'}"></i>
@@ -109,9 +109,19 @@ const ServicesModule = {
       if (!card) continue;
       
       const dot = card.querySelector('.service-status-dot');
+      const statusText = card.querySelector('.service-info-item:last-child');
+      const icon = card.querySelector('.service-name i');
       if (dot) {
         dot.className = `service-status-dot ${info.listening ? 'on' : 'off'}`;
       }
+      if (statusText) {
+        statusText.innerHTML = `<span class="service-status-dot ${info.listening ? 'on' : 'off'}"></span>${info.listening ? 'Activo' : 'Inactivo'}`;
+      }
+      if (icon) {
+        icon.style.color = info.listening ? 'var(--green)' : 'var(--text-muted)';
+      }
+      card.classList.toggle('running', !!info.listening);
+      card.classList.toggle('stopped', !info.listening);
     }
   }
 };

@@ -9,7 +9,16 @@ const API = {
         headers: { 'Content-Type': 'application/json', ...options.headers },
         ...options
       });
-      const data = await res.json();
+
+      let data = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        data = { error: text || `Error ${res.status}` };
+      }
+
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
       return data;
     } catch (err) {
@@ -99,6 +108,10 @@ const Utils = {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  },
+
+  escapeJsString(str) {
+    return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
   },
 
   todayDate() {

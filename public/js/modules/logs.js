@@ -83,6 +83,7 @@ const LogsModule = {
       login_success: 'green', login_failed: 'red', logout: 'blue',
       user_create: 'green', user_edit: 'blue', user_delete: 'red',
       user_ban: 'orange', user_unban: 'green', password_reset: 'blue',
+      password_change: 'blue',
       demo_create: 'accent', demo_delete: 'red', demo_expire: 'orange',
       reseller_create: 'green', reseller_edit: 'blue', reseller_delete: 'red',
       credits_update: 'accent', service_toggle: 'blue', port_change: 'orange',

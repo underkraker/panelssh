@@ -16,6 +16,7 @@ module.exports = {
   
   // Session
   SESSION_SECRET: process.env.SESSION_SECRET || 'lacasita-secret-2026-change-me',
+  CREDENTIALS_SECRET: process.env.CREDENTIALS_SECRET || `${process.env.SESSION_SECRET || 'lacasita-secret-2026-change-me'}-creds`,
   
   // Brute force
   MAX_LOGIN_ATTEMPTS: 3,

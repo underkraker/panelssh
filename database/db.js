@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
+const credentials = require('../services/credentials');
 
 // Ensure database directory exists
 const dbDir = path.dirname(config.DB_PATH);
@@ -91,6 +92,33 @@ db.exec(`
     custom_config TEXT
   );
 `);
+
+// ── Schema migrations ───────────────────────────────────────
+const userColumns = db.prepare('PRAGMA table_info(users)').all();
+const hasEncryptedPassword = userColumns.some(col => col.name === 'password_encrypted');
+
+if (!hasEncryptedPassword) {
+  db.exec('ALTER TABLE users ADD COLUMN password_encrypted TEXT');
+}
+
+// Migrate any plain-text password to encrypted storage
+try {
+  const toMigrate = db.prepare(`
+    SELECT id, password, password_encrypted
+    FROM users
+    WHERE (password_encrypted IS NULL OR password_encrypted = '')
+      AND password IS NOT NULL
+      AND password != '[secure]'
+  `).all();
+
+  const updatePassword = db.prepare('UPDATE users SET password = ?, password_encrypted = ? WHERE id = ?');
+  for (const row of toMigrate) {
+    const encrypted = credentials.encrypt(row.password);
+    updatePassword.run('[secure]', encrypted, row.id);
+  }
+} catch (err) {
+  console.error('[DB] Password migration warning:', err.message);
+}
 
 // ── Seed Default Admin ───────────────────────────────────────
 const existingAdmin = db.prepare('SELECT id FROM admins WHERE username = ?').get('admin');

@@ -108,6 +108,26 @@ const SettingsModule = {
   },
 
   async changePassword() {
-    Toast.info('Funcionalidad de seguridad en desarrollo');
+    const currentPassword = document.getElementById('current-pass').value;
+    const newPassword = document.getElementById('new-pass').value;
+    const confirmPassword = document.getElementById('confirm-pass').value;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return Toast.error('Complete todos los campos');
+    }
+
+    if (newPassword !== confirmPassword) {
+      return Toast.error('La confirmación no coincide');
+    }
+
+    try {
+      await API.post('/api/settings/password/change', { currentPassword, newPassword, confirmPassword });
+      Toast.success('Contraseña actualizada correctamente');
+      document.getElementById('current-pass').value = '';
+      document.getElementById('new-pass').value = '';
+      document.getElementById('confirm-pass').value = '';
+    } catch (err) {
+      Toast.error(err.message);
+    }
   }
 };

@@ -1,6 +1,6 @@
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
-const path = require('express');
+const config = require('../config');
 
 const isRoot = process.getuid && process.getuid() === 0;
 let hysteriaProcess = null;
@@ -9,6 +9,8 @@ function start(port = 4434) {
   if (isRoot) {
     stop();
     const configPath = '/etc/hysteria/server.yaml';
+    const domain = config.DOMAIN || 'localhost';
+    const authPassword = process.env.HYSTERIA_PASSWORD || 'hysteria_pass';
     
     // Ensure config directory exists
     if (!fs.existsSync('/etc/hysteria')) {
@@ -16,17 +18,17 @@ function start(port = 4434) {
     }
 
     // Basic Hysteria 2 config
-    const config = `listen: :${port}
+    const yamlConfig = `listen: :${port}
 acme:
   domains:
-    - krakerpanel.duckdns.org # This should be dynamic
+    - ${domain}
   email: admin@panel.local
 auth:
   type: password
-  password: hysteria_pass
+  password: ${authPassword}
 `;
 
-    fs.writeFileSync(configPath, config);
+    fs.writeFileSync(configPath, yamlConfig);
 
     hysteriaProcess = spawn('hysteria', ['server', '--config', configPath], {
       detached: true,
@@ -34,6 +36,7 @@ auth:
     });
     hysteriaProcess.unref();
   }
+  console.log(`[Hysteria] Iniciado en puerto ${port}`);
 }
 
 function stop() {
@@ -44,6 +47,7 @@ function stop() {
       hysteriaProcess = null;
     }
   }
+  console.log('[Hysteria] Detenido');
 }
 
 function isRunning() {

@@ -1,8 +1,8 @@
 const express = require('express');
 const db = require('../database/db');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 const systemUsers = require('../services/system-users');
-const telegram = require('../services/telegram');
+const credentials = require('../services/credentials');
 
 const router = express.Router();
 
@@ -18,14 +18,20 @@ router.get('/', requireAuth, (req, res) => {
   
   if (user.role === 'admin') {
     users = db.prepare(`
-      SELECT u.*, a.username as created_by_name 
+      SELECT
+        u.id, u.username, u.device_limit, u.expiry_date, u.created_by,
+        u.status, u.created_at,
+        a.username as created_by_name
       FROM users u LEFT JOIN admins a ON u.created_by = a.id 
       ORDER BY u.created_at DESC
     `).all();
   } else {
     // Reseller only sees their own users
     users = db.prepare(`
-      SELECT u.*, a.username as created_by_name 
+      SELECT
+        u.id, u.username, u.device_limit, u.expiry_date, u.created_by,
+        u.status, u.created_at,
+        a.username as created_by_name
       FROM users u LEFT JOIN admins a ON u.created_by = a.id 
       WHERE u.created_by = ? ORDER BY u.created_at DESC
     `).all(user.id);
@@ -67,13 +73,15 @@ router.post('/', requireAuth, (req, res) => {
   }
   
   try {
+    const encryptedPassword = credentials.encrypt(password);
+
     // Create system user
     systemUsers.createSystemUser(username, password, expiry_date);
     
     // Insert in database
     const result = db.prepare(
-      'INSERT INTO users (username, password, device_limit, expiry_date, created_by) VALUES (?, ?, ?, ?, ?)'
-    ).run(username, password, device_limit || 1, expiry_date, user.id);
+      'INSERT INTO users (username, password, password_encrypted, device_limit, expiry_date, created_by) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(username, '[secure]', encryptedPassword, device_limit || 1, expiry_date, user.id);
     
     // Deduct reseller credit
     if (user.role === 'reseller') {
@@ -106,8 +114,9 @@ router.put('/:id', requireAuth, (req, res) => {
   
   try {
     if (password) {
+      const encryptedPassword = credentials.encrypt(password);
       systemUsers.changePassword(target.username, password);
-      db.prepare('UPDATE users SET password = ? WHERE id = ?').run(password, id);
+      db.prepare('UPDATE users SET password = ?, password_encrypted = ? WHERE id = ?').run('[secure]', encryptedPassword, id);
     }
     if (device_limit !== undefined) {
       db.prepare('UPDATE users SET device_limit = ? WHERE id = ?').run(device_limit, id);
@@ -154,10 +163,11 @@ router.get('/me/config', requireAuth, (req, res) => {
   try {
     const services = db.prepare('SELECT name, port FROM service_ports WHERE enabled = 1').all();
     const domain = require('../config').DOMAIN || 'localhost';
+    const panelUser = db.prepare('SELECT expiry_date FROM users WHERE username = ?').get(user.username);
     
     res.json({
       username: user.username,
-      expiry_date: user.expiry_date,
+      expiry_date: panelUser ? panelUser.expiry_date : null,
       domain: domain,
       services: services,
       payload: `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`
@@ -215,14 +225,56 @@ router.post('/:id/reset-password', requireAuth, (req, res) => {
   }
   
   try {
+    const encryptedPassword = credentials.encrypt(password);
     systemUsers.changePassword(target.username, password);
-    db.prepare('UPDATE users SET password = ? WHERE id = ?').run(password, id);
+    db.prepare('UPDATE users SET password = ?, password_encrypted = ? WHERE id = ?').run('[secure]', encryptedPassword, id);
     
     logAction(user.id, 'password_reset', target.username, 'Contraseña reseteada', ip);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Error al resetear contraseña: ' + err.message });
   }
+});
+
+// GET /api/users/:id/ticket — full ticket data with secure password retrieval
+router.get('/:id/ticket', requireAuth, (req, res) => {
+  const { user } = req.session;
+  const { id } = req.params;
+
+  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!target) return res.status(404).json({ error: 'Usuario no encontrado.' });
+
+  if (user.role === 'reseller' && target.created_by !== user.id) {
+    return res.status(403).json({ error: 'No autorizado.' });
+  }
+
+  let password = '';
+  try {
+    if (target.password_encrypted) {
+      password = credentials.decrypt(target.password_encrypted);
+    }
+  } catch (err) {
+    password = '';
+  }
+
+  // Backward compatibility for old rows
+  if (!password && target.password && target.password !== '[secure]') {
+    password = target.password;
+  }
+
+  const services = db.prepare('SELECT name, port FROM service_ports WHERE enabled = 1').all();
+  const domain = require('../config').DOMAIN || 'localhost';
+
+  res.json({
+    ticket: {
+      username: target.username,
+      password: password || 'No disponible',
+      expiry_date: target.expiry_date,
+      domain,
+      services,
+      payload: `GET / HTTP/1.1[crlf]Host: ${domain}[crlf]Upgrade: websocket[crlf][crlf]`
+    }
+  });
 });
 
 module.exports = router;
