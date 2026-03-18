@@ -2,7 +2,7 @@ const path = require('path');
 
 module.exports = {
   // Panel port (should NOT conflict with 80/443)
-  PORT: process.env.PANEL_PORT || 8080,
+  PORT: process.env.PANEL_PORT || 2026,
   
   // Domain
   DOMAIN: process.env.PANEL_DOMAIN || 'localhost',

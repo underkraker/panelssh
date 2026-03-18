@@ -80,8 +80,8 @@ else
 fi
 
 # ── Panel Port ────────────────────────────────────────────
-read -p "Puerto del panel (default: 8080): " PANEL_PORT
-PANEL_PORT=${PANEL_PORT:-8080}
+read -p "Puerto del panel (default: 2026): " PANEL_PORT
+PANEL_PORT=${PANEL_PORT:-2026}
 echo -e "${GREEN}✓ Panel en puerto $PANEL_PORT${NC}"
 
 # ── Install Dependencies ─────────────────────────────────
