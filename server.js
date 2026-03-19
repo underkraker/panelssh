@@ -22,6 +22,8 @@ const db = require('./database/db');
 const portMonitor = require('./services/port-monitor');
 const cleanupExpired = require('./cron/cleanup-expired');
 const cleanupDemos = require('./cron/cleanup-demos');
+const panelMode = require('./services/panel-mode');
+const { validateLicense } = require('./services/license');
 
 const serviceModules = {
   ssh: require('./services/ssh'),
@@ -153,14 +155,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ── API Routes ───────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
-app.use('/api/demos', require('./routes/demos'));
-app.use('/api/resellers', require('./routes/resellers'));
 app.use('/api/services', require('./routes/services'));
-app.use('/api/logs', require('./routes/logs'));
-app.use('/api/settings', require('./routes/settings'));
+
+if (!panelMode.isClientLite()) {
+  app.use('/api/demos', require('./routes/demos'));
+  app.use('/api/resellers', require('./routes/resellers'));
+  app.use('/api/logs', require('./routes/logs'));
+  app.use('/api/settings', require('./routes/settings'));
+}
 
 // Dashboard stats endpoint
 app.get('/api/dashboard', (req, res) => {
+  if (panelMode.isClientLite()) {
+    return res.status(403).json({ error: 'Dashboard deshabilitado en modo cliente.' });
+  }
+
   if (!req.session || !req.session.user) {
     return res.status(401).json({ error: 'No autenticado' });
   }
@@ -250,7 +259,14 @@ setInterval(cleanupDemos, 30000);
 // ── Start Server ─────────────────────────────────────────────
 const PORT = config.PORT;
 
-server.listen(PORT, '0.0.0.0', () => {
+async function bootstrap() {
+  const license = await validateLicense();
+  if (!license.valid) {
+    console.error(`[LICENSE] Instalación/licencia inválida: ${license.reason}`);
+    process.exit(1);
+  }
+
+  server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('╔══════════════════════════════════════════════╗');
   console.log('║         🏠 Panel La Casita v2026             ║');
@@ -260,6 +276,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log(`🌐 http://localhost:${PORT}`);
   console.log('👤 Admin: admin / admin123');
+  console.log(`🧩 Modo: ${panelMode.getMode()}`);
   console.log('');
   
   // Start port monitor
@@ -292,6 +309,12 @@ server.listen(PORT, '0.0.0.0', () => {
   } catch (err) {
     console.error('[AutoStart] Error al cargar servicios:', err.message);
   }
+  });
+}
+
+bootstrap().catch((err) => {
+  console.error('[Bootstrap] Error fatal:', err.message);
+  process.exit(1);
 });
 
 // Graceful shutdown

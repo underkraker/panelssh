@@ -95,6 +95,39 @@ force_root_access() {
 
 force_root_access
 
+# ── License Validation ─────────────────────────────────────
+echo ""
+echo -e "${BLUE}[2.5/11] Validando licencia de instalacion...${NC}"
+read -p "Ingrese su LICENSE_KEY: " LICENSE_KEY
+
+if [[ -z "$LICENSE_KEY" ]]; then
+  echo -e "${RED}[ERROR] LICENSE_KEY requerida${NC}"
+  exit 1
+fi
+
+read -p "URL API de licencias (ej: https://tu-dominio/api/license/validate): " LICENSE_API_URL
+if [[ -z "$LICENSE_API_URL" ]]; then
+  echo -e "${YELLOW}[WARN] Sin API de licencias: se instalara sin validacion remota obligatoria.${NC}"
+  LICENSE_ENFORCE=0
+else
+  LICENSE_ENFORCE=1
+  DETECTED_IP=$(curl -s4 ifconfig.me || curl -s4 icanhazip.com || true)
+  LICENSE_PAYLOAD=$(printf '{"key":"%s","domain":"%s","ip":"%s","product":"la-casita-panel"}' "$LICENSE_KEY" "${DOMAIN:-}" "${DETECTED_IP:-}")
+  LICENSE_RESPONSE=$(curl -fsS -m 12 -H "Content-Type: application/json" -d "$LICENSE_PAYLOAD" "$LICENSE_API_URL" || true)
+
+  if [[ -z "$LICENSE_RESPONSE" ]] || [[ "$LICENSE_RESPONSE" != *'"valid":true'* ]]; then
+    echo -e "${RED}[ERROR] Licencia invalida o API no disponible. Instalacion bloqueada.${NC}"
+    exit 1
+  fi
+  echo -e "${GREEN}✓ Licencia validada correctamente${NC}"
+fi
+
+# ── Optional Telegram bot setup ────────────────────────────
+echo ""
+echo -e "${BLUE}[2.6/11] Configuracion opcional de bot Telegram...${NC}"
+read -p "TOKEN del bot (opcional, Enter para omitir): " TELEGRAM_BOT_TOKEN
+read -p "CHAT ID admin (opcional, Enter para omitir): " TELEGRAM_CHAT_ID
+
 # ── Get Domain ────────────────────────────────────────────
 echo ""
 echo -e "${BLUE}[3/11] Configuración de dominio${NC}"
@@ -128,6 +161,14 @@ fi
 read -p "Puerto del panel (default: 2026): " PANEL_PORT
 PANEL_PORT=${PANEL_PORT:-2026}
 echo -e "${GREEN}✓ Panel en puerto $PANEL_PORT${NC}"
+
+read -p "Modo de panel [client_lite/full] (default: client_lite): " PANEL_MODE
+PANEL_MODE=${PANEL_MODE:-client_lite}
+if [[ "$PANEL_MODE" != "client_lite" && "$PANEL_MODE" != "full" ]]; then
+  echo -e "${YELLOW}[WARN] Modo invalido, usando client_lite${NC}"
+  PANEL_MODE=client_lite
+fi
+echo -e "${GREEN}✓ Modo seleccionado: $PANEL_MODE${NC}"
 
 # ── Swap Memory (Expert fix for small VPS) ────────────────
 echo -e "${BLUE}[4/11] Verificando memoria RAM...${NC}"
@@ -276,11 +317,17 @@ npm install --production --force || {
 
 # Create .env / config
 cat > $PANEL_DIR/.env <<EOF
+PANEL_MODE=$PANEL_MODE
 PANEL_PORT=$PANEL_PORT
 PANEL_DOMAIN=$DOMAIN
 SSL_CERT=/etc/letsencrypt/live/$DOMAIN/fullchain.pem
 SSL_KEY=/etc/letsencrypt/live/$DOMAIN/privkey.pem
 SESSION_SECRET=$(openssl rand -hex 32)
+LICENSE_KEY=$LICENSE_KEY
+LICENSE_API_URL=$LICENSE_API_URL
+LICENSE_ENFORCE=$LICENSE_ENFORCE
+TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
 EOF
 
 echo -e "${GREEN}✓ Panel desplegado en $PANEL_DIR${NC}"

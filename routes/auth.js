@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../database/db');
 const { bruteForceProtection, recordFailedAttempt, resetAttempts } = require('../middleware/bruteforce');
+const panelMode = require('../services/panel-mode');
 
 const router = express.Router();
 
@@ -52,6 +53,11 @@ router.post('/login', bruteForceProtection, (req, res) => {
         id: admin.id,
         username: admin.username,
         role: admin.role
+      },
+      panel: {
+        mode: panelMode.getMode(),
+        allowedPages: panelMode.getAllowedPages(),
+        features: panelMode.featureFlags()
       }
     });
   });
@@ -70,7 +76,14 @@ router.post('/logout', (req, res) => {
 // GET /api/auth/me
 router.get('/me', (req, res) => {
   if (req.session && req.session.user) {
-    return res.json({ user: req.session.user });
+    return res.json({
+      user: req.session.user,
+      panel: {
+        mode: panelMode.getMode(),
+        allowedPages: panelMode.getAllowedPages(),
+        features: panelMode.featureFlags()
+      }
+    });
   }
   res.status(401).json({ error: 'No autenticado' });
 });

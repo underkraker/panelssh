@@ -56,5 +56,13 @@ const Sidebar = {
     document.querySelectorAll('.admin-only').forEach(el => {
       el.style.display = '';
     });
+  },
+
+  applyAllowedPages(allowedPages) {
+    const allowed = new Set(Array.isArray(allowedPages) ? allowedPages : []);
+    document.querySelectorAll('.nav-item').forEach((item) => {
+      const page = item.dataset.page;
+      item.style.display = allowed.has(page) ? '' : 'none';
+    });
   }
 };

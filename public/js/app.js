@@ -4,6 +4,7 @@
 
 const App = {
   user: null,
+  panel: null,
   currentPage: null,
   ws: null,
 
@@ -22,6 +23,7 @@ const App = {
     try {
       const data = await API.get('/api/auth/me');
       this.user = data.user;
+      this.panel = data.panel || { allowedPages: Object.keys(this.pages), features: {} };
       this.showApp();
     } catch (e) {
       this.showLogin();
@@ -58,6 +60,9 @@ const App = {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.getElementById('sidebar-username').textContent = this.user.username;
+    const allowedPages = Array.isArray(this.panel && this.panel.allowedPages)
+      ? this.panel.allowedPages
+      : Object.keys(this.pages);
 
     // Show/hide admin-only items
     if (this.user.role === 'admin') {
@@ -66,11 +71,13 @@ const App = {
       Sidebar.hideAdminItems();
     }
 
+    Sidebar.applyAllowedPages(allowedPages);
+
     // Connect WebSocket
     this.connectWS();
 
-    // Navigate to dashboard
-    this.navigate('dashboard');
+    const initial = allowedPages.includes('dashboard') ? 'dashboard' : allowedPages[0];
+    if (initial) this.navigate(initial);
   },
 
   async login() {
@@ -91,6 +98,7 @@ const App = {
     try {
       const data = await API.post('/api/auth/login', { username, password });
       this.user = data.user;
+      this.panel = data.panel || { allowedPages: Object.keys(this.pages), features: {} };
       errorEl.style.display = 'none';
       this.showApp();
     } catch (err) {
@@ -108,12 +116,20 @@ const App = {
     } catch (e) {}
     
     this.user = null;
+    this.panel = null;
     if (this.ws) { this.ws.close(); this.ws = null; }
     this.showLogin();
   },
 
   navigate(page) {
     if (!this.pages[page]) return;
+    const allowedPages = Array.isArray(this.panel && this.panel.allowedPages)
+      ? this.panel.allowedPages
+      : Object.keys(this.pages);
+    if (!allowedPages.includes(page)) {
+      Toast.error('Modulo no disponible en este panel');
+      return;
+    }
     const pageConfig = this.pages[page];
     
     // Admin-only check

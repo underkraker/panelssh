@@ -92,6 +92,7 @@ const ServicesModule = {
     const name = this.serviceNames[s.name] || s.name;
     const desc = this.serviceDescriptions[s.name] || '';
     const running = !!s.running;
+    const enabled = !!s.enabled;
     const protectedService = s.name === 'ssh';
     const health = this.healthData && this.healthData.services
       ? this.healthData.services.find(x => x.name === s.name)
@@ -112,7 +113,7 @@ const ServicesModule = {
             ${name}
           </div>
           <label class="toggle-switch">
-            <input type="checkbox" ${running ? 'checked' : ''} ${protectedService ? 'disabled' : ''} onchange="ServicesModule.toggleService('${s.name}')">
+            <input type="checkbox" ${enabled ? 'checked' : ''} ${protectedService ? 'disabled' : ''} onchange="ServicesModule.toggleService('${s.name}')">
             <span class="toggle-slider"></span>
           </label>
         </div>

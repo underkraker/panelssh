@@ -1,6 +1,9 @@
 const path = require('path');
 
 module.exports = {
+  // Panel mode: full | client_lite
+  PANEL_MODE: (process.env.PANEL_MODE || 'full').toLowerCase(),
+
   // Panel port (should NOT conflict with 80/443)
   PORT: process.env.PANEL_PORT || 2026,
   
@@ -17,6 +20,11 @@ module.exports = {
   // Session
   SESSION_SECRET: process.env.SESSION_SECRET || 'lacasita-secret-2026-change-me',
   CREDENTIALS_SECRET: process.env.CREDENTIALS_SECRET || `${process.env.SESSION_SECRET || 'lacasita-secret-2026-change-me'}-creds`,
+
+  // License validation (optional, but recommended for commercial deployments)
+  LICENSE_KEY: process.env.LICENSE_KEY || '',
+  LICENSE_API_URL: process.env.LICENSE_API_URL || '',
+  LICENSE_ENFORCE: String(process.env.LICENSE_ENFORCE || '0') === '1',
   
   // Brute force
   MAX_LOGIN_ATTEMPTS: 3,
