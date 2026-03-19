@@ -27,9 +27,10 @@ auth:
   privileged.writeTextFile(configPath, yamlConfig);
 
   // We should ideally run this as a service, but for now we follow the existing spawn pattern
-  // but using sudo if not root via privileged.run mechanism
-  const cmd = privileged.isRoot ? 'hysteria' : 'sudo';
-  const args = privileged.isRoot ? ['server', '--config', configPath] : ['-n', 'hysteria', 'server', '--config', configPath];
+  // but using sudo if not root via privileged.run  // Launch hysteria
+  const hysteriaBin = '/usr/local/bin/hysteria';
+  const cmd = privileged.isRoot ? hysteriaBin : 'sudo';
+  const args = privileged.isRoot ? ['server', '--config', configPath] : ['-n', hysteriaBin, 'server', '--config', configPath];
 
   const { spawn } = require('child_process');
   hysteriaProcess = spawn(cmd, args, {

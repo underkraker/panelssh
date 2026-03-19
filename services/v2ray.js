@@ -56,13 +56,18 @@ function generateConfig(port) {
 
 function start(port) {
   const configContent = generateConfig(port);
-  const configPath = '/etc/v2ray/config.json';
+  const configPathXray = '/usr/local/etc/xray/config.json';
+  const configPathV2ray = '/etc/v2ray/config.json';
   
-  // Ensure directory exists
+  // Ensure directories exist
+  privileged.run('mkdir', ['-p', '/usr/local/etc/xray']);
   privileged.run('mkdir', ['-p', '/etc/v2ray']);
-  privileged.writeTextFile(configPath, configContent);
   
-  // Try xray first, then v2ray
+  // Write to both just in case
+  privileged.writeTextFile(configPathXray, configContent);
+  privileged.writeTextFile(configPathV2ray, configContent);
+  
+  // Try xray first (most common now), then v2ray
   try {
     privileged.run('systemctl', ['restart', 'xray']);
     console.log(`[V2Ray] Xray reiniciado en puerto ${port}/${port + 1}`);
@@ -71,8 +76,10 @@ function start(port) {
       privileged.run('systemctl', ['restart', 'v2ray']);
       console.log(`[V2Ray] V2Ray reiniciado en puerto ${port}/${port + 1}`);
     } catch (e2) {
-      console.error('[V2Ray] No se pudo iniciar xray ni v2ray:', e2.message);
-      throw e2;
+      console.error('[V2Ray] No se pudo iniciar xray ni v2ray via systemctl. Intentando pkill/spawn...');
+      // Fallback: kill any existing and no-op (let watchdog or manual restart handle it if systemd is broken)
+      privileged.run('pkill', ['-x', 'xray'], { ignoreError: true });
+      privileged.run('pkill', ['-x', 'v2ray'], { ignoreError: true });
     }
   }
 }

@@ -63,7 +63,7 @@ function buildHealthSnapshot() {
 
     details.push({
       name: svc.name,
-      port: svc.name === 'ssh' ? 22 : svc.port,
+      port: svc.port,
       enabled,
       running,
       listening,
@@ -183,18 +183,9 @@ router.post('/:name/toggle', requireAuth, requireAdmin, (req, res) => {
   try {
     const newState = !svc.enabled;
 
-    if (name === 'ssh' && !newState) {
-      return res.status(400).json({
-        error: 'SSH en puerto 22 está protegido y no se puede desactivar.'
-      });
-    }
-    
     if (newState) {
-      const targetPort = name === 'ssh' ? 22 : svc.port;
+      const targetPort = svc.port;
       mod.start(targetPort);
-      if (name === 'ssh' && svc.port !== 22) {
-        db.prepare('UPDATE service_ports SET port = 22 WHERE name = ?').run('ssh');
-      }
     } else {
       mod.stop();
     }
