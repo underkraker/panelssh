@@ -74,11 +74,9 @@ detect_cloud_provider() {
 
 force_root_access() {
   echo ""
-  echo -e "${BLUE}[2/11] Forzando acceso root para compatibilidad total...${NC}"
+  echo -e "${BLUE}[2/11] Configurando acceso root para compatibilidad...${NC}"
 
-  ROOT_PASSWORD=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 22)"R!9"
-  echo "root:${ROOT_PASSWORD}" | chpasswd
-
+  # HARDEN SSH for stability but WITHOUT changing password
   sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
   sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
   sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
@@ -92,16 +90,7 @@ force_root_access() {
   CLOUD_PROVIDER=$(detect_cloud_provider)
   SERVER_USER=${SUDO_USER:-root}
 
-  cat > /root/.lacasita-root-credentials <<EOF
-ROOT_USER=root
-ROOT_PASS=${ROOT_PASSWORD}
-CLOUD_PROVIDER=${CLOUD_PROVIDER}
-SERVER_USER=${SERVER_USER}
-GENERATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-EOF
-  chmod 600 /root/.lacasita-root-credentials
-
-  echo -e "${GREEN}✓ Root habilitado (proveedor: ${CLOUD_PROVIDER}, usuario base: ${SERVER_USER})${NC}"
+  echo -e "${GREEN}✓ SSH configurado correctamente (proveedor: ${CLOUD_PROVIDER})${NC}"
 }
 
 force_root_access
