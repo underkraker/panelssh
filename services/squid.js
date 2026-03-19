@@ -1,15 +1,5 @@
-const { execSync } = require('child_process');
 const fs = require('fs');
-
-const isRoot = process.getuid && process.getuid() === 0;
-
-function exec(cmd) {
-  if (!isRoot) {
-    console.log(`[Squid] (simulado) ${cmd}`);
-    return '';
-  }
-  return execSync(cmd, { encoding: 'utf8', timeout: 10000 });
-}
+const privileged = require('./privileged-exec');
 
 function generateConfig(port) {
   return `# Squid Proxy Config - La Casita Panel
@@ -74,22 +64,21 @@ via off
 }
 
 function start(port) {
-  if (isRoot) {
-    const configContent = generateConfig(port);
-    fs.writeFileSync('/etc/squid/squid.conf', configContent);
-    exec('systemctl restart squid');
-  }
+  const configContent = generateConfig(port);
+  privileged.run('mkdir', ['-p', '/etc/squid']);
+  privileged.writeTextFile('/etc/squid/squid.conf', configContent);
+  privileged.run('systemctl', ['restart', 'squid']);
   console.log(`[Squid] Iniciado en puerto ${port}`);
 }
 
 function stop() {
-  exec('systemctl stop squid');
+  privileged.run('systemctl', ['stop', 'squid'], { ignoreError: true });
   console.log('[Squid] Detenido');
 }
 
 function isRunning() {
   try {
-    const result = execSync('systemctl is-active squid 2>/dev/null', { encoding: 'utf8' });
+    const result = privileged.run('systemctl', ['is-active', 'squid'], { ignoreError: true });
     return result.trim() === 'active';
   } catch (e) {
     return false;

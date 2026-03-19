@@ -1,7 +1,8 @@
 const { spawnSync } = require('child_process');
 const fs = require('fs');
+const privileged = require('./privileged-exec');
 
-const isRoot = process.getuid && process.getuid() === 0;
+const isRoot = privileged.isRoot;
 
 function validateUsername(username) {
   return /^[a-z_][a-z0-9_-]{0,31}$/.test(String(username || ''));
@@ -13,27 +14,7 @@ function validateExpiryDate(expiryDate) {
 
 function run(command, args = [], options = {}) {
   const { ignoreError = false, input } = options;
-  if (!isRoot) {
-    console.log(`[System] (simulado) ${command} ${args.join(' ')}`);
-    return '';
-  }
-
-  const result = spawnSync(command, args, {
-    encoding: 'utf8',
-    timeout: 10000,
-    input: input || undefined
-  });
-
-  if (result.status !== 0) {
-    if (ignoreError) {
-      console.warn(`[System] Ignored error for: ${command} ${args.join(' ')}`);
-      return '';
-    }
-    const errorOutput = result.stderr || result.stdout || 'unknown error';
-    throw new Error(errorOutput.trim());
-  }
-
-  return result.stdout || '';
+  return privileged.run(command, args, { ignoreError, input });
 }
 
 function setPassword(username, password) {

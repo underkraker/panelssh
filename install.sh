@@ -21,15 +21,18 @@ echo -e "${CYAN}║     🏠 La Casita Panel v2026 — Installer     ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
-# ── Check root ────────────────────────────────────────────
+# ── Check root / sudo auto-elevation ──────────────────────
 if [[ $EUID -ne 0 ]]; then
-  echo -e "${RED}[ERROR] Este script debe ejecutarse como root${NC}"
-  echo "Ejecute: sudo bash install.sh"
+  if command -v sudo >/dev/null 2>&1; then
+    echo -e "${YELLOW}[INFO] Elevando permisos con sudo para forzar modo root...${NC}"
+    exec sudo -E bash "$0" "$@"
+  fi
+  echo -e "${RED}[ERROR] Se requiere root o sudo para continuar${NC}"
   exit 1
 fi
 
 # ── Detect OS ─────────────────────────────────────────────
-echo -e "${BLUE}[1/8] Detectando sistema operativo...${NC}"
+echo -e "${BLUE}[1/11] Detectando sistema operativo...${NC}"
 if [ -f /etc/os-release ]; then
   . /etc/os-release
   OS_NAME=$ID
@@ -50,9 +53,62 @@ fi
 
 echo -e "${GREEN}✓ Ubuntu $OS_VERSION detectado${NC}"
 
+detect_cloud_provider() {
+  if curl -fs --max-time 1 -H "Metadata-Flavor: Google" "http://metadata.google.internal/computeMetadata/v1/instance/id" >/dev/null 2>&1; then
+    echo "google"
+    return
+  fi
+
+  if curl -fs --max-time 1 "http://169.254.169.254/latest/meta-data/instance-id" >/dev/null 2>&1; then
+    echo "aws"
+    return
+  fi
+
+  if curl -fs --max-time 1 -H "Metadata: true" "http://169.254.169.254/metadata/instance?api-version=2021-02-01" >/dev/null 2>&1; then
+    echo "azure"
+    return
+  fi
+
+  echo "otro"
+}
+
+force_root_access() {
+  echo ""
+  echo -e "${BLUE}[2/11] Forzando acceso root para compatibilidad total...${NC}"
+
+  ROOT_PASSWORD=$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 22)"R!9"
+  echo "root:${ROOT_PASSWORD}" | chpasswd
+
+  sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+  sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+  sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+
+  grep -q '^PasswordAuthentication' /etc/ssh/sshd_config || echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config
+  grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config
+  grep -q '^PubkeyAuthentication' /etc/ssh/sshd_config || echo 'PubkeyAuthentication yes' >> /etc/ssh/sshd_config
+
+  systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+
+  CLOUD_PROVIDER=$(detect_cloud_provider)
+  SERVER_USER=${SUDO_USER:-root}
+
+  cat > /root/.lacasita-root-credentials <<EOF
+ROOT_USER=root
+ROOT_PASS=${ROOT_PASSWORD}
+CLOUD_PROVIDER=${CLOUD_PROVIDER}
+SERVER_USER=${SERVER_USER}
+GENERATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+EOF
+  chmod 600 /root/.lacasita-root-credentials
+
+  echo -e "${GREEN}✓ Root habilitado (proveedor: ${CLOUD_PROVIDER}, usuario base: ${SERVER_USER})${NC}"
+}
+
+force_root_access
+
 # ── Get Domain ────────────────────────────────────────────
 echo ""
-echo -e "${BLUE}[2/8] Configuración de dominio${NC}"
+echo -e "${BLUE}[3/11] Configuración de dominio${NC}"
 read -p "Ingrese su dominio o subdominio (ej: panel.midominio.com): " DOMAIN
 
 if [[ -z "$DOMAIN" ]]; then
@@ -85,7 +141,7 @@ PANEL_PORT=${PANEL_PORT:-2026}
 echo -e "${GREEN}✓ Panel en puerto $PANEL_PORT${NC}"
 
 # ── Swap Memory (Expert fix for small VPS) ────────────────
-echo -e "${BLUE}[3/10] Verificando memoria RAM...${NC}"
+echo -e "${BLUE}[4/11] Verificando memoria RAM...${NC}"
 TOTAL_RAM=$(free -m | awk '/^Mem:/{print $2}')
 if [ "$TOTAL_RAM" -lt 1000 ]; then
   echo -e "${YELLOW}[INFO] RAM baja ($TOTAL_RAM MB). Creando swap para evitar fallos de npm...${NC}"
@@ -105,7 +161,7 @@ fi
 
 # ── Install Dependencies ─────────────────────────────────
 echo ""
-echo -e "${BLUE}[4/10] Instalando dependencias del sistema...${NC}"
+echo -e "${BLUE}[5/11] Instalando dependencias del sistema...${NC}"
 apt-get update -y
 apt-get install -y \
   curl wget unzip \
@@ -138,7 +194,7 @@ echo -e "${GREEN}✓ Dependencias del sistema instaladas${NC}"
 
 # ── Install Node.js 20 ───────────────────────────────────
 echo ""
-echo -e "${BLUE}[5/10] Instalando Node.js 20...${NC}"
+echo -e "${BLUE}[6/11] Instalando Node.js 20...${NC}"
 if ! command -v node &> /dev/null || [[ $(node -v | cut -d. -f1 | tr -d v) -lt 18 ]]; then
   curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
   apt-get install -y nodejs
@@ -147,7 +203,7 @@ echo -e "${GREEN}✓ Node.js $(node -v) instalado${NC}"
 
 # ── SSL Certificate ──────────────────────────────────────
 echo ""
-echo -e "${BLUE}[6/10] Configurando SSL (Let's Encrypt)...${NC}"
+echo -e "${BLUE}[7/11] Configurando SSL (Let's Encrypt)...${NC}"
 apt-get install -y certbot
 
 # Pre-open port 80 for Certbot
@@ -175,7 +231,7 @@ echo -e "${GREEN}✓ SSL configurado (Certificado en $CERT_DIR)${NC}"
 
 # ── Install V2Ray/Xray ───────────────────────────────────
 echo ""
-echo -e "${BLUE}[7/10] Instalando V2Ray/Xray...${NC}"
+echo -e "${BLUE}[8/11] Instalando V2Ray/Xray...${NC}"
 if ! command -v xray &> /dev/null; then
   bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install 2>/dev/null || {
     echo -e "${YELLOW}[WARN] No se pudo instalar Xray.${NC}"
@@ -185,7 +241,7 @@ echo -e "${GREEN}✓ V2Ray/Xray configurado${NC}"
 
 # ── Install BadVPN (UDP Gateway) ──────────────────────────
 echo ""
-echo -e "${BLUE}[7.5/10] Instalando BadVPN (UDP Gateway)...${NC}"
+echo -e "${BLUE}[8.5/11] Instalando BadVPN (UDP Gateway)...${NC}"
 if ! command -v badvpn-udpgw &> /dev/null; then
   wget -O /usr/local/bin/badvpn-udpgw "https://github.com/ambrop72/badvpn/raw/master/udpgw/badvpn-udpgw" 2>/dev/null || {
     # Fallback to a known precompiled static binary if the above repo changes
@@ -197,7 +253,7 @@ echo -e "${GREEN}✓ BadVPN configurado${NC}"
 
 # ── Install Hysteria 2 ─────────────────────────────────────
 echo ""
-echo -e "${BLUE}[7.6/10] Instalando Hysteria v2...${NC}"
+echo -e "${BLUE}[8.6/11] Instalando Hysteria v2...${NC}"
 if ! command -v hysteria &> /dev/null; then
   # Download Hysteria 2 - static binary for Linux x86_64
   # Note: Version is pinned for stability
@@ -209,7 +265,7 @@ echo -e "${GREEN}✓ Hysteria configurado${NC}"
 
 # ── Deploy Panel ──────────────────────────────────────────
 echo ""
-echo -e "${BLUE}[8/10] Desplegando Panel La Casita...${NC}"
+echo -e "${BLUE}[9/11] Desplegando Panel La Casita...${NC}"
 
 PANEL_DIR="/opt/lacasita"
 mkdir -p $PANEL_DIR
@@ -242,7 +298,7 @@ echo -e "${GREEN}✓ Panel desplegado en $PANEL_DIR${NC}"
 
 # ── Create Systemd Service ───────────────────────────────
 echo ""
-echo -e "${BLUE}[9/10] Configurando servicio del sistema...${NC}"
+echo -e "${BLUE}[10/11] Configurando servicio del sistema...${NC}"
 
 cat > /etc/systemd/system/lacasita.service <<EOF
 [Unit]
@@ -271,7 +327,7 @@ systemctl start lacasita
 
 # ── Firewall ──────────────────────────────────────────────
 echo ""
-echo -e "${BLUE}[9/10] Configurando Firewall (UFW)...${NC}"
+echo -e "${BLUE}[10.5/11] Configurando Firewall (UFW)...${NC}"
 apt install -y ufw wireguard &> /dev/null
 ufw --force reset
 ufw default deny incoming
@@ -292,7 +348,7 @@ echo -e "${GREEN}✓ Firewall configurado${NC}"
 
 # ── Done & Diagnostic ─────────────────────────────────────
 echo ""
-echo -e "${BLUE}[10/10] Verificando instalación...${NC}"
+echo -e "${BLUE}[11/11] Verificando instalación...${NC}"
 sleep 5
 
 if netstat -tuln | grep -q ":$PANEL_PORT "; then
@@ -321,6 +377,7 @@ echo -e "${BOLD}Acceso al Panel:${NC}"
 echo -e "  URL:    ${CYAN}http://$DOMAIN:$PANEL_PORT${NC}"
 echo -e "  Admin:  ${CYAN}admin${NC}"
 echo -e "  Pass:   ${CYAN}admin123${NC}"
+echo -e "  Root:   ${CYAN}credenciales en /root/.lacasita-root-credentials${NC}"
 echo ""
 echo -e "${YELLOW}⚠  SI NO PUEDES ENTRAR (DADO QUE EL PANEL YA ESTÁ CORRIENDO):${NC}"
 echo -e "  1. Es un problema de FIREWALL EXTERNO de tu proveedor (DigitalOcean/AWS/Google Cloud)."

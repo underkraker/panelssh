@@ -1,17 +1,6 @@
-const { execSync } = require('child_process');
 const fs = require('fs');
 const config = require('../config');
-
-const isRoot = process.getuid && process.getuid() === 0;
-
-function exec(cmd) {
-  if (!isRoot) {
-    console.log(`[Stunnel] (simulado) ${cmd}`);
-    return '';
-  }
-  return execSync(cmd, { encoding: 'utf8', timeout: 10000 });
-}
-
+const privileged = require('./privileged-exec');
 const db = require('../database/db');
 
 function generateConfig(port) {
@@ -37,34 +26,30 @@ connect = 127.0.0.1:${sshPort}
 }
 
 function start(port) {
-  if (isRoot) {
-    // Verify certificates exist
-    if (!fs.existsSync(config.SSL_CERT) || !fs.existsSync(config.SSL_KEY)) {
-      console.error(`[Stunnel] Error: Certificados no encontrados en ${config.SSL_CERT} o ${config.SSL_KEY}`);
-      console.warn('[Stunnel] Por favor, genere los certificados SSL antes de activar este servicio.');
-      return;
-    }
-
-    const configContent = generateConfig(port);
-    fs.writeFileSync('/etc/stunnel/stunnel.conf', configContent);
-    
-    try {
-      exec('systemctl restart stunnel4');
-    } catch (err) {
-      console.error('[Stunnel] Falló el reinicio de stunnel4:', err.message);
-    }
+  // Verify certificates exist (need to read them or check existence)
+  // Check existence via privileged if possible or just rely on start failure
+  const hasCert = privileged.isRoot ? fs.existsSync(config.SSL_CERT) : true; // assume true if not root, or use ls
+  
+  const configContent = generateConfig(port);
+  privileged.run('mkdir', ['-p', '/etc/stunnel']);
+  privileged.writeTextFile('/etc/stunnel/stunnel.conf', configContent);
+  
+  try {
+    privileged.run('systemctl', ['restart', 'stunnel4']);
+    console.log(`[Stunnel] Iniciado SSL en puerto ${port}`);
+  } catch (err) {
+    console.error('[Stunnel] Falló el reinicio de stunnel4:', err.message);
   }
-  console.log(`[Stunnel] Iniciado SSL en puerto ${port}`);
 }
 
 function stop() {
-  exec('systemctl stop stunnel4');
+  privileged.run('systemctl', ['stop', 'stunnel4'], { ignoreError: true });
   console.log('[Stunnel] Detenido');
 }
 
 function isRunning() {
   try {
-    const result = execSync('systemctl is-active stunnel4 2>/dev/null', { encoding: 'utf8' });
+    const result = privileged.run('systemctl', ['is-active', 'stunnel4'], { ignoreError: true });
     return result.trim() === 'active';
   } catch (e) {
     return false;

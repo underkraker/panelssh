@@ -1,19 +1,20 @@
-const { execSync } = require('child_process');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const privileged = require('./privileged-exec');
+const db = require('../database/db');
 
-const isRoot = process.getuid && process.getuid() === 0;
-
-function exec(cmd) {
-  if (!isRoot) {
-    console.log(`[V2Ray] (simulado) ${cmd}`);
-    return '';
+function getVmessId() {
+  let setting = db.prepare('SELECT value FROM settings WHERE key = ?').get('v2ray_vmess_id');
+  if (!setting) {
+    const newId = uuidv4();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)').run('v2ray_vmess_id', newId);
+    return newId;
   }
-  return execSync(cmd, { encoding: 'utf8', timeout: 15000 });
+  return setting.value;
 }
 
 function generateConfig(port) {
-  const vmessId = uuidv4();
+  const vmessId = getVmessId();
   
   return JSON.stringify({
     log: { loglevel: "warning" },
@@ -54,50 +55,50 @@ function generateConfig(port) {
 }
 
 function start(port) {
-  if (isRoot) {
-    const configContent = generateConfig(port);
-    const configPath = '/etc/v2ray/config.json';
-    
-    // Create dir if needed
-    try { fs.mkdirSync('/etc/v2ray', { recursive: true }); } catch (e) {}
-    fs.writeFileSync(configPath, configContent);
-    
-    // Try xray first, then v2ray
+  const configContent = generateConfig(port);
+  const configPath = '/etc/v2ray/config.json';
+  
+  // Ensure directory exists
+  privileged.run('mkdir', ['-p', '/etc/v2ray']);
+  privileged.writeTextFile(configPath, configContent);
+  
+  // Try xray first, then v2ray
+  try {
+    privileged.run('systemctl', ['restart', 'xray']);
+    console.log(`[V2Ray] Xray reiniciado en puerto ${port}/${port + 1}`);
+  } catch (e) {
     try {
-      exec('systemctl restart xray');
-    } catch (e) {
-      try {
-        exec('systemctl restart v2ray');
-      } catch (e2) {
-        console.error('[V2Ray] No se pudo iniciar xray ni v2ray');
-        throw e2;
-      }
+      privileged.run('systemctl', ['restart', 'v2ray']);
+      console.log(`[V2Ray] V2Ray reiniciado en puerto ${port}/${port + 1}`);
+    } catch (e2) {
+      console.error('[V2Ray] No se pudo iniciar xray ni v2ray:', e2.message);
+      throw e2;
     }
   }
-  console.log(`[V2Ray] Iniciado VMess/VLESS en puerto ${port}/${port + 1}`);
 }
 
 function stop() {
-  try { exec('systemctl stop xray'); } catch (e) {}
-  try { exec('systemctl stop v2ray'); } catch (e) {}
+  privileged.run('systemctl', ['stop', 'xray'], { ignoreError: true });
+  privileged.run('systemctl', ['stop', 'v2ray'], { ignoreError: true });
   console.log('[V2Ray] Detenido');
 }
 
 function isRunning() {
   try {
-    const xray = execSync('systemctl is-active xray 2>/dev/null', { encoding: 'utf8' });
+    const xray = privileged.run('systemctl', ['is-active', 'xray'], { ignoreError: true });
     if (xray.trim() === 'active') return true;
   } catch (e) {}
   
   try {
-    const v2ray = execSync('systemctl is-active v2ray 2>/dev/null', { encoding: 'utf8' });
+    const v2ray = privileged.run('systemctl', ['is-active', 'v2ray'], { ignoreError: true });
     if (v2ray.trim() === 'active') return true;
   } catch (e) {}
 
   // Fallback: pgrep
   try {
-    const pgrep = execSync('pgrep xray || pgrep v2ray', { encoding: 'utf8' });
-    return pgrep.trim().length > 0;
+    const pgrep = privileged.run('pgrep', ['-x', 'xray'], { ignoreError: true }) || 
+                  privileged.run('pgrep', ['-x', 'v2ray'], { ignoreError: true });
+    return pgrep && pgrep.trim().length > 0;
   } catch (e) {
     return false;
   }

@@ -39,10 +39,7 @@ function startEnabledServices() {
     const mod = serviceModules[svc.name];
     if (!mod) return;
 
-    const targetPort = svc.name === 'ssh' ? 22 : svc.port;
-    if (svc.name === 'ssh' && svc.port !== 22) {
-      db.prepare('UPDATE service_ports SET port = 22 WHERE name = ?').run('ssh');
-    }
+    const targetPort = svc.port;
 
     console.log(`[AutoStart] Iniciando ${svc.name} en puerto ${targetPort}...`);
     try {
@@ -72,7 +69,7 @@ function startServiceWatchdog() {
         }
 
         if (!running) {
-          const targetPort = svc.name === 'ssh' ? 22 : svc.port;
+          const targetPort = svc.port;
           
           // Check for port conflict before restarting
           try {

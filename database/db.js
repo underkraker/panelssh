@@ -152,12 +152,19 @@ for (const svc of defaultServices) {
   insertService.run(svc.name, svc.port, svc.enabled);
 }
 
-// Keep SSH protected and always configured on port 22
-db.prepare("UPDATE service_ports SET port = 22, enabled = 1 WHERE name = 'ssh'").run();
+// Ensure SSH is present in service_ports
+const hasSsh = db.prepare('SELECT 1 FROM service_ports WHERE name = ?').get('ssh');
+if (!hasSsh) {
+  db.prepare('INSERT INTO service_ports (name, port, enabled) VALUES (?, ?, ?)').run('ssh', 22, 1);
+}
 
 // ── Seed Default Settings ────────────────────────────────────
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 insertSetting.run('panel_port', '8080');
 insertSetting.run('domain', 'localhost');
+insertSetting.run('root_forced', '0');
+insertSetting.run('privilege_mode', 'auto');
+insertSetting.run('cloud_provider', 'auto');
+insertSetting.run('server_user', 'root');
 
 module.exports = db;

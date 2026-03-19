@@ -1,24 +1,20 @@
-const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const config = require('../config');
+const privileged = require('./privileged-exec');
 
-const isRoot = process.getuid && process.getuid() === 0;
 let hysteriaProcess = null;
 
 function start(port = 4434) {
-  if (isRoot) {
-    stop();
-    const configPath = '/etc/hysteria/server.yaml';
-    const domain = config.DOMAIN || 'localhost';
-    const authPassword = process.env.HYSTERIA_PASSWORD || 'hysteria_pass';
-    
-    // Ensure config directory exists
-    if (!fs.existsSync('/etc/hysteria')) {
-      fs.mkdirSync('/etc/hysteria', { recursive: true });
-    }
+  stop();
+  const configPath = '/etc/hysteria/server.yaml';
+  const domain = config.DOMAIN || 'localhost';
+  const authPassword = process.env.HYSTERIA_PASSWORD || 'hysteria_pass';
+  
+  // Ensure config directory exists
+  privileged.run('mkdir', ['-p', '/etc/hysteria']);
 
-    // Basic Hysteria 2 config
-    const yamlConfig = `listen: :${port}
+  // Basic Hysteria 2 config
+  const yamlConfig = `listen: :${port}
 acme:
   domains:
     - ${domain}
@@ -28,33 +24,36 @@ auth:
   password: ${authPassword}
 `;
 
-    fs.writeFileSync(configPath, yamlConfig);
+  privileged.writeTextFile(configPath, yamlConfig);
 
-    hysteriaProcess = spawn('hysteria', ['server', '--config', configPath], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    hysteriaProcess.unref();
-  }
+  // We should ideally run this as a service, but for now we follow the existing spawn pattern
+  // but using sudo if not root via privileged.run mechanism
+  const cmd = privileged.isRoot ? 'hysteria' : 'sudo';
+  const args = privileged.isRoot ? ['server', '--config', configPath] : ['-n', 'hysteria', 'server', '--config', configPath];
+
+  const { spawn } = require('child_process');
+  hysteriaProcess = spawn(cmd, args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+  hysteriaProcess.unref();
+  
   console.log(`[Hysteria] Iniciado en puerto ${port}`);
 }
 
 function stop() {
-  if (isRoot) {
-    try { execSync('pkill -f hysteria', { stdio: 'ignore' }); } catch (e) {}
-    if (hysteriaProcess) {
-      hysteriaProcess.kill();
-      hysteriaProcess = null;
-    }
+  privileged.run('pkill', ['-f', 'hysteria'], { ignoreError: true });
+  if (hysteriaProcess) {
+    hysteriaProcess.kill();
+    hysteriaProcess = null;
   }
   console.log('[Hysteria] Detenido');
 }
 
 function isRunning() {
-  if (!isRoot) return false;
   try {
-    const result = execSync('pgrep -f hysteria', { encoding: 'utf8' });
-    return result.trim().length > 0;
+    const result = privileged.run('pgrep', ['-f', 'hysteria'], { ignoreError: true });
+    return result && result.trim().length > 0;
   } catch (e) {
     return false;
   }

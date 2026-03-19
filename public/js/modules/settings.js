@@ -5,10 +5,15 @@ const SettingsModule = {
     content.innerHTML = '<div class="spinner"></div>';
     
     let backups = [];
+    let rootStatus = null;
     if (App.user.role === 'admin') {
       try {
-        const data = await API.get('/api/settings/backup/list');
-        backups = data.backups || [];
+        const [backupData, vpsData] = await Promise.all([
+          API.get('/api/settings/backup/list'),
+          API.get('/api/settings/vps/root-status').catch(() => null)
+        ]);
+        backups = backupData.backups || [];
+        rootStatus = vpsData;
       } catch (e) {
         console.error('Error fetching backups:', e);
       }
@@ -38,6 +43,8 @@ const SettingsModule = {
             <i class="fas fa-save"></i> Actualizar Seguridad
           </button>
         </div>
+
+        ${App.user.role === 'admin' ? this.renderRootCard(rootStatus) : ''}
 
         ${App.user.role === 'admin' ? `
         <div class="card" style="margin-bottom:24px">
@@ -96,6 +103,54 @@ const SettingsModule = {
     `;
   },
 
+  renderRootCard(status) {
+    const fallback = {
+      privilege: { mode: 'none', isRoot: false, canUseSudo: false },
+      rootForced: false,
+      cloudProvider: 'auto',
+      serverUser: 'desconocido',
+      ssh: {
+        passwordAuthentication: false,
+        permitRootLogin: false,
+        pubkeyAuthentication: false
+      },
+      diagnostics: {
+        canCreateUsers: false,
+        canChangePasswords: false,
+        canManageServices: false
+      }
+    };
+
+    const data = status || fallback;
+    const modeLabel = data.privilege.mode === 'root'
+      ? 'Root directo'
+      : (data.privilege.mode === 'sudo' ? 'Sudo activo' : 'Sin privilegios');
+    const modeBadge = data.privilege.mode === 'none' ? 'badge-red' : 'badge-green';
+
+    return `
+      <div class="card" style="margin-bottom:24px">
+        <div class="card-header">
+          <h3 class="card-title"><i class="fas fa-user-shield"></i> Compatibilidad VPS (Forzar Root)</h3>
+          <button class="btn btn-danger btn-sm" onclick="SettingsModule.forceRootAccess()">
+            <i class="fas fa-bolt"></i> Forzar Root
+          </button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <span class="badge ${modeBadge}">Modo: ${modeLabel}</span>
+          <span class="badge ${data.rootForced ? 'badge-green' : 'badge-orange'}">Root forzado: ${data.rootForced ? 'SI' : 'NO'}</span>
+          <span class="badge badge-blue">Proveedor: ${Utils.escapeHtml(String(data.cloudProvider || 'auto'))}</span>
+          <span class="badge badge-blue">Usuario servidor: ${Utils.escapeHtml(String(data.serverUser || 'root'))}</span>
+        </div>
+        <div style="color:var(--text-secondary);font-size:0.85rem;line-height:1.9">
+          <p>SSH PasswordAuthentication: <strong>${data.ssh.passwordAuthentication ? 'yes' : 'no'}</strong></p>
+          <p>SSH PermitRootLogin: <strong>${data.ssh.permitRootLogin ? 'yes' : 'no'}</strong></p>
+          <p>SSH PubkeyAuthentication: <strong>${data.ssh.pubkeyAuthentication ? 'yes' : 'no'}</strong></p>
+          <p>Permisos useradd/chpasswd/systemctl: <strong>${(data.diagnostics.canCreateUsers && data.diagnostics.canChangePasswords && data.diagnostics.canManageServices) ? 'OK' : 'INCOMPLETO'}</strong></p>
+        </div>
+      </div>
+    `;
+  },
+
   async createBackup() {
     try {
       Toast.info('Creando respaldo...');
@@ -129,5 +184,34 @@ const SettingsModule = {
     } catch (err) {
       Toast.error(err.message);
     }
+  },
+
+  forceRootAccess() {
+    Modal.confirm(
+      'Forzar root en VPS',
+      'Esto activara PermitRootLogin yes y PasswordAuthentication yes. Solo continua si entiendes el impacto de seguridad.',
+      async () => {
+        try {
+          Toast.info('Forzando acceso root...');
+          const result = await API.post('/api/settings/vps/force-root', {
+            provider: 'auto'
+          });
+
+          Modal.show(
+            'Root configurado',
+            `<p style="color:var(--text-secondary);margin-bottom:8px">Guarda esta contraseña inmediatamente. No se mostrara de nuevo:</p>
+             <div class="card" style="padding:12px;background:var(--bg-soft)">
+               <strong style="word-break:break-all">${Utils.escapeHtml(result.rootPassword || '')}</strong>
+             </div>`,
+            '<button class="btn btn-primary" onclick="Modal.hide()">Entendido</button>'
+          );
+          Toast.success('Root forzado con exito');
+          this.render();
+        } catch (err) {
+          Toast.error(err.message);
+          this.render();
+        }
+      }
+    );
   }
 };

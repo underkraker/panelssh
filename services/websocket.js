@@ -1,16 +1,7 @@
-const { execSync, spawn } = require('child_process');
 const fs = require('fs');
+const privileged = require('./privileged-exec');
 
-const isRoot = process.getuid && process.getuid() === 0;
 let wsProcess = null;
-
-function exec(cmd) {
-  if (!isRoot) {
-    console.log(`[WebSocket] (simulado) ${cmd}`);
-    return '';
-  }
-  return execSync(cmd, { encoding: 'utf8', timeout: 10000 });
-}
 
 const pythonScript = `
 import socket
@@ -87,28 +78,32 @@ if __name__ == '__main__':
 `;
 
 function start(port) {
-  if (isRoot) {
-    const scriptPath = '/usr/local/bin/ws-tunnel.py';
-    fs.writeFileSync(scriptPath, pythonScript);
-    
-    // Kill existing
-    try { exec('pkill -f ws-tunnel.py'); } catch (e) {}
-    
-    // Launch in background with shell to ensure proper detachment
-    const pythonCmd = commandExists('python3') ? 'python3' : 'python';
-    const child = spawn(pythonCmd, [scriptPath, port.toString()], {
-      detached: true,
-      stdio: 'ignore'
-    });
-    child.unref();
-    wsProcess = child;
-  }
+  const scriptPath = '/usr/local/bin/ws-tunnel.py';
+  privileged.writeTextFile(scriptPath, pythonScript);
+  
+  // Kill existing
+  privileged.run('pkill', ['-f', 'ws-tunnel.py'], { ignoreError: true });
+  
+  // Launch in background
+  const pythonCmd = commandExists('python3') ? 'python3' : 'python';
+  
+  const cmd = privileged.isRoot ? pythonCmd : 'sudo';
+  const args = privileged.isRoot ? [scriptPath, port.toString()] : ['-n', pythonCmd, scriptPath, port.toString()];
+
+  const { spawn } = require('child_process');
+  const child = spawn(cmd, args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
+  wsProcess = child;
+  
   console.log(`[WebSocket] Iniciado en puerto ${port}`);
 }
 
 function commandExists(cmd) {
   try {
-    execSync(`command -v ${cmd}`);
+    privileged.run('command', ['-v', cmd]);
     return true;
   } catch (e) {
     return false;
@@ -116,7 +111,7 @@ function commandExists(cmd) {
 }
 
 function stop() {
-  try { exec('pkill -f ws-tunnel.py'); } catch (e) {}
+  privileged.run('pkill', ['-f', 'ws-tunnel.py'], { ignoreError: true });
   if (wsProcess) {
     try { wsProcess.kill(); } catch (e) {}
     wsProcess = null;
@@ -126,8 +121,8 @@ function stop() {
 
 function isRunning() {
   try {
-    const result = execSync('pgrep -f ws-tunnel.py 2>/dev/null', { encoding: 'utf8' });
-    return result.trim().length > 0;
+    const result = privileged.run('pgrep', ['-f', 'ws-tunnel.py'], { ignoreError: true });
+    return result && result.trim().length > 0;
   } catch (e) {
     return false;
   }
